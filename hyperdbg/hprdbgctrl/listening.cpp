@@ -108,7 +108,7 @@ StartAgain:
       // sth wrong happened, the packet is not belonging to use
       // nothing to do, just wait again
       //
-      ShowMessages("err, unknown packet received from the debugger\n");
+      ShowMessages("err, unknown packet received from the debuggee\n");
       goto StartAgain;
     }
 
@@ -176,8 +176,11 @@ StartAgain:
                      PausePacket->EventTag - DebuggerEventTagStartSeed);
       }
 
-      HyperDbgDisassembler64(PausePacket->InstructionBytesOnRip,
-                             PausePacket->Rip, MAXIMUM_INSTR_SIZE, 1);
+      if (PausePacket->PausingReason !=
+          DEBUGGEE_PAUSING_REASON_PAUSE_WITHOUT_DISASM) {
+        HyperDbgDisassembler64(PausePacket->InstructionBytesOnRip,
+                               PausePacket->Rip, MAXIMUM_INSTR_SIZE, 1);
+      }
 
       switch (PausePacket->PausingReason) {
 
@@ -185,6 +188,7 @@ StartAgain:
       case DEBUGGEE_PAUSING_REASON_DEBUGGEE_HARDWARE_DEBUG_REGISTER_HIT:
       case DEBUGGEE_PAUSING_REASON_DEBUGGEE_PROCESS_SWITCHED:
       case DEBUGGEE_PAUSING_REASON_DEBUGGEE_EVENT_TRIGGERED:
+      case DEBUGGEE_PAUSING_REASON_PAUSE_WITHOUT_DISASM:
 
         //
         // Unpause the debugger to get commands
@@ -347,7 +351,7 @@ StartAgain:
 
       FormatsPacket =
           (DEBUGGEE_FORMATS_PACKET *)(((CHAR *)TheActualPacket) +
-                                      sizeof(DEBUGGEE_FORMATS_PACKET));
+                                      sizeof(DEBUGGER_REMOTE_PACKET));
 
       if (FormatsPacket->Result == DEBUGEER_OPERATION_WAS_SUCCESSFULL) {
 
@@ -366,13 +370,14 @@ StartAgain:
     case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_REGISTERING_EVENT:
 
       EventAndActionPacket =
-          (DEBUGGER_EVENT_AND_ACTION_REG_BUFFER
-               *)(((CHAR *)TheActualPacket) + sizeof(DEBUGGEE_FORMATS_PACKET));
+          (DEBUGGER_EVENT_AND_ACTION_REG_BUFFER *)(((CHAR *)TheActualPacket) +
+                                                   sizeof(
+                                                       DEBUGGER_REMOTE_PACKET));
 
       //
       // Move the buffer to the global variable
       //
-      memcpy(&g_DebuggeeResultOfAddingActionsToEvent, EventAndActionPacket,
+      memcpy(&g_DebuggeeResultOfRegisteringEvent, EventAndActionPacket,
              sizeof(DEBUGGER_EVENT_AND_ACTION_REG_BUFFER));
 
       //
@@ -386,8 +391,9 @@ StartAgain:
     case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_ADDING_ACTION_TO_EVENT:
 
       EventAndActionPacket =
-          (DEBUGGER_EVENT_AND_ACTION_REG_BUFFER
-               *)(((CHAR *)TheActualPacket) + sizeof(DEBUGGEE_FORMATS_PACKET));
+          (DEBUGGER_EVENT_AND_ACTION_REG_BUFFER *)(((CHAR *)TheActualPacket) +
+                                                   sizeof(
+                                                       DEBUGGER_REMOTE_PACKET));
 
       //
       // Move the buffer to the global variable
