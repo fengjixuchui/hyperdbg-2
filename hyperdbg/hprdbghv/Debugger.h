@@ -177,9 +177,6 @@ BOOLEAN
 DebuggerParseEventsModificationFromUsermode(PDEBUGGER_MODIFY_EVENTS DebuggerEventModificationRequest);
 
 BOOLEAN
-DebuggerQueryEventState(PDEBUGGER_QUERY_EVENT_STATE DebuggerQueryEventStateRequest);
-
-BOOLEAN
 DebuggerTerminateEvent(UINT64 Tag);
 
 BOOLEAN
@@ -195,7 +192,13 @@ UINT32
 DebuggerEventListCount(PLIST_ENTRY TargetEventList);
 
 BOOLEAN
+DebuggerIsTagValid(UINT64 Tag);
+
+BOOLEAN
 DebuggerEnableEvent(UINT64 Tag);
+
+BOOLEAN
+DebuggerQueryStateEvent(UINT64 Tag);
 
 BOOLEAN
 DebuggerDisableEvent(UINT64 Tag);

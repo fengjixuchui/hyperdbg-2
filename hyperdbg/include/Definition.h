@@ -155,6 +155,7 @@
 #define OPERATION_DEBUGGEE_REGISTER_EVENT 0x8 | OPERATION_MANDATORY_DEBUGGEE_BIT
 #define OPERATION_DEBUGGEE_ADD_ACTION_TO_EVENT                                 \
   0x9 | OPERATION_MANDATORY_DEBUGGEE_BIT
+#define OPERATION_DEBUGGEE_CLEAR_EVENTS 0xA | OPERATION_MANDATORY_DEBUGGEE_BIT
 
 //////////////////////////////////////////////////
 //				   Test Cases                   //
@@ -200,6 +201,7 @@
 #define DEBUGGER_SYNCRONIZATION_OBJECT_FLUSH_RESULT 0x8
 #define DEBUGGER_SYNCRONIZATION_OBJECT_REGISTER_EVENT 0x9
 #define DEBUGGER_SYNCRONIZATION_OBJECT_ADD_ACTION_TO_EVENT 0xa
+#define DEBUGGER_SYNCRONIZATION_OBJECT_MODIFY_AND_QUERY_EVENT 0xb
 
 //////////////////////////////////////////////////
 //            End of Buffer Detection           //
@@ -444,6 +446,7 @@ typedef enum _DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION {
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_USER_INPUT_BUFFER,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_REGISTER_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_ADD_ACTION_TO_EVENT,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_QUERY_AND_MODIFY_EVENT,
 
   //
   // Debuggee to debugger
@@ -458,6 +461,7 @@ typedef enum _DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION {
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_FLUSH,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_REGISTERING_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_ADDING_ACTION_TO_EVENT,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_QUERY_AND_MODIFY_EVENT,
 
 } DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION;
 
@@ -491,6 +495,7 @@ typedef struct _REGISTER_NOTIFY_BUFFER {
  *
  */
 typedef enum _DEBUGGER_MODIFY_EVENTS_TYPE {
+  DEBUGGER_MODIFY_EVENTS_QUERY_STATE,
   DEBUGGER_MODIFY_EVENTS_ENABLE,
   DEBUGGER_MODIFY_EVENTS_DISABLE,
   DEBUGGER_MODIFY_EVENTS_CLEAR
@@ -505,26 +510,10 @@ typedef struct _DEBUGGER_MODIFY_EVENTS {
   UINT64 Tag;          // Tag of the target event that we want to modify
   UINT64 KernelStatus; // Kerenl put the status in this field
   DEBUGGER_MODIFY_EVENTS_TYPE
-  TypeOfAction; // Determines what's the action (enable | disable | clear)
+  TypeOfAction;      // Determines what's the action (enable | disable | clear)
+  BOOLEAN IsEnabled; // Determines what's the action (enable | disable | clear)
 
 } DEBUGGER_MODIFY_EVENTS, *PDEBUGGER_MODIFY_EVENTS;
-
-/* ==============================================================================================
- */
-
-#define SIZEOF_DEBUGGER_QUERY_EVENT_STATE sizeof(DEBUGGER_QUERY_EVENT_STATE)
-
-/**
- * @brief query whether the event is enabled or disabled
- *
- */
-typedef struct _DEBUGGER_QUERY_EVENT_STATE {
-
-  UINT64 Tag;          // Tag of the target event that we want to query about it
-  UINT64 KernelStatus; // Kerenl put the status in this field
-  BOOLEAN IsEnabled;   // Show the state of the event (enabled/disabled)
-
-} DEBUGGER_QUERY_EVENT_STATE, *PDEBUGGER_QUERY_EVENT_STATE;
 
 /*
 ==============================================================================================
@@ -1536,10 +1525,3 @@ typedef struct _DEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET {
  */
 #define IOCTL_SEND_GENERAL_BUFFER_FROM_DEBUGGEE_TO_DEBUGGER                    \
   CTL_CODE(FILE_DEVICE_UNKNOWN, 0x815, METHOD_BUFFERED, FILE_ANY_ACCESS)
-
-/**
- * @brief ioctl, check whether the event is enabled or not
- *
- */
-#define IOCTL_DEBUGGER_QUERY_EVENT_STATE                                       \
-  CTL_CODE(FILE_DEVICE_UNKNOWN, 0x816, METHOD_BUFFERED, FILE_ANY_ACCESS)
