@@ -13,6 +13,10 @@
 #pragma once
 #include "ScriptEngineCommonDefinitions.h"
 
+#ifndef PacketChunkSize
+#define PacketChunkSize 1000
+#endif // !PacketChunkSize
+
 //
 // Wrapper headers
 //
@@ -26,6 +30,13 @@ ScriptEngineWrapperGetAddressOfReservedBuffer(PDEBUGGER_EVENT_ACTION Action);
 
 BOOLEAN
 CheckMemoryAccessSafety(UINT64 TargetAddress, UINT32 Size);
+
+UINT32
+VmxrootCompatibleStrlen(const CHAR *S);
+
+BOOLEAN
+MemoryMapperReadMemorySafe(UINT64 VaAddressToRead, PVOID BufferToSaveMemory,
+                           SIZE_T SizeToRead);
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
@@ -59,6 +70,9 @@ typedef unsigned char UINT8, *PUINT8;
 typedef unsigned short UINT16, *PUINT16;
 typedef unsigned int UINT32, *PUINT32;
 typedef unsigned __int64 UINT64, *PUINT64;
+
+#define FALSE 0
+#define TRUE 1
 
 typedef struct _GUEST_REGS_USER_MODE_USER_MODE {
   ULONG64 rax; // 0x00
@@ -105,10 +119,12 @@ __declspec(dllimport) void RemoveSymbolBuffer(PSYMBOL_BUFFER SymbolBuffer);
 }
 #endif // SCRIPT_ENGINE_USER_MODE
 
+UINT64 GetValue(PGUEST_REGS_USER_MODE GuestRegs, ACTION_BUFFER ActionBuffer,
+                UINT64 *g_TempList, UINT64 *g_VariableList, PSYMBOL Symbol);
+
 //
 // Pseudo registers
 //
-
 // $tid
 UINT64 ScriptEnginePseudoRegGetTid() {
 
@@ -631,42 +647,282 @@ VOID ScriptEngineFunctionJson(UINT64 Tag, BOOLEAN ImmediateMessagePassing,
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 }
 
-VOID ScriptEngineFunctionPrintf(UINT64 Tag, BOOLEAN ImmediateMessagePassing,
-                                char *Format, UINT64 ArgCount, PSYMBOL FirstArg,
-                                BOOLEAN HasError) {
+UINT32 CustomStrlen(UINT64 StrAddr, BOOLEAN IsWstring) {
 
 #ifdef SCRIPT_ENGINE_USER_MODE
+  return strlen((const char *)StrAddr);
+#endif // SCRIPT_ENGINE_USER_MODE
 
-  HasError = FALSE;
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  return VmxrootCompatibleStrlen((const CHAR *)StrAddr);
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+}
+
+BOOLEAN CheckIfStringIsSafe(UINT64 StrAddr, BOOLEAN IsWstring) {
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+  return TRUE;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+
+  //
+  // At least two chars (wchar_t is 4 byte
+  //
+  if (CheckMemoryAccessSafety(StrAddr, IsWstring ? 4 : 2)) {
+    return TRUE;
+  } else {
+    return FALSE;
+  }
+
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+}
+
+VOID ApplyFormatSpecifier(const CHAR *CurrentSpecifier, CHAR *FinalBuffer,
+                          PUINT32 CurrentProcessedPositionFromStartOfFormat,
+                          PUINT32 CurrentPositionInFinalBuffer, UINT64 Val,
+                          UINT32 SizeOfFinalBuffer) {
+
+  UINT32 TempBufferLen = 0;
+  CHAR TempBuffer[20 + 1] = {
+      0}; // Maximum uint64_t is 18446744073709551615 + 1 thus its 20 character
+          // for maximum buffer + 1 end char null
+
+  *CurrentProcessedPositionFromStartOfFormat =
+      *CurrentProcessedPositionFromStartOfFormat + strlen(CurrentSpecifier);
+  sprintf(TempBuffer, CurrentSpecifier, Val);
+  TempBufferLen = strlen(TempBuffer);
+
+  //
+  // Check final buffer capacity
+  //
+  if (*CurrentPositionInFinalBuffer + TempBufferLen > SizeOfFinalBuffer) {
+
+    //
+    // Over passed buffer
+    //
+    return;
+  }
+
+  memcpy(&FinalBuffer[*CurrentPositionInFinalBuffer], TempBuffer,
+         TempBufferLen);
+
+  *CurrentPositionInFinalBuffer = *CurrentPositionInFinalBuffer + TempBufferLen;
+}
+
+BOOLEAN
+ApplyStringFormatSpecifier(const CHAR *CurrentSpecifier, CHAR *FinalBuffer,
+                           PUINT32 CurrentProcessedPositionFromStartOfFormat,
+                           PUINT32 CurrentPositionInFinalBuffer, UINT64 Val,
+                           BOOLEAN IsWstring, UINT32 SizeOfFinalBuffer) {
+  UINT32 StringSize;
+
+  //
+  // First we have to check if string is valid or not
+  //
+  if (!CheckIfStringIsSafe(Val, IsWstring)) {
+    return FALSE;
+  }
+  StringSize = CustomStrlen(Val, IsWstring);
+
+  //
+  // get the length of the string (format) identifier
+  //
+  *CurrentProcessedPositionFromStartOfFormat += strlen(CurrentSpecifier);
+
+  //
+  // Check final buffer capacity
+  //
+  if (*CurrentPositionInFinalBuffer + StringSize > SizeOfFinalBuffer) {
+
+    //
+    // Over passed buffer
+    //
+    return TRUE;
+  }
+
+  //
+  // Move the buffer string into the target buffer
+  //
+#ifdef SCRIPT_ENGINE_USER_MODE
+  memcpy(&FinalBuffer[*CurrentPositionInFinalBuffer], (void *)Val, StringSize);
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafe(Val, &FinalBuffer[*CurrentPositionInFinalBuffer],
+                             StringSize);
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+  *CurrentPositionInFinalBuffer += StringSize;
+
+  return TRUE;
+}
+
+VOID ScriptEngineFunctionPrintf(PGUEST_REGS_USER_MODE GuestRegs,
+                                ACTION_BUFFER ActionDetail, UINT64 *g_TempList,
+                                UINT64 *g_VariableList, UINT64 Tag,
+                                BOOLEAN ImmediateMessagePassing, char *Format,
+                                UINT64 ArgCount, PSYMBOL FirstArg,
+                                BOOLEAN *HasError) {
+
+  *HasError = FALSE;
   PSYMBOL Symbol;
 
-  UINT32 ArgCounter = 0;
+  UINT32 i = 0;
 
   char *Str = Format;
 
   do {
-    if (!strncmp(Str, "%s", 2)) {
-      Symbol = FirstArg + ArgCounter;
-      Symbol->Type |= SYMBOL_MEM_VALID_CHECK_MASK;
-      ArgCounter++;
-      if (ArgCounter == ArgCount)
+
+    if (!strncmp(Str, "%s", 2) || !strncmp(Str, "%d", 2) ||
+        !strncmp(Str, "%x", 2)) {
+
+      if (i < ArgCount)
+        Symbol = FirstArg + i;
+      else {
+        *HasError = TRUE;
         break;
-    } else if (!strncmp(Str, "%d", 2) || !strncmp(Str, "%x", 2)) {
-      ArgCounter++;
-      if (ArgCounter == ArgCount)
-        break;
+      }
+      Symbol->Type &= 0xffffffff;
+      Symbol->Type |= (UINT64)(Str - Format - 1) << 32;
+      i++;
     }
     Str++;
   } while (*Str);
 
-  HasError = (ArgCounter != ArgCount);
-  if (HasError)
+  if (*HasError == FALSE)
+    *HasError = (i != ArgCount);
+  if (*HasError)
     return;
 
+    //
+    // Call printf
+    //
+
+    //
+    // When we're here, all the pointers are the pointers including %ws and %s
+    // pointers are checked and are safe to access
+    //
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+  printf("============================================================\n");
+#endif // SCRIPT_ENGINE_USER_MODE
+
+  char FinalBuffer[PacketChunkSize] = {0};
+  UINT32 CurrentPositionInFinalBuffer = 0;
+  UINT32 CurrentProcessedPositionFromStartOfFormat = 0;
+  BOOLEAN WithoutAnyFormatSpecifier = TRUE;
+  UINT64 Val;
+  UINT32 Position;
+  UINT32 LenOfFormats = strlen(Format) + 1;
+
+  for (int i = 0; i < ArgCount; i++) {
+
+    WithoutAnyFormatSpecifier = FALSE;
+    Symbol = FirstArg + i;
+
+    //
+    // Address is either wstring (%ws) or string (%s)
+    //
+
+    Position = (Symbol->Type >> 32) + 1;
+    Symbol->Type &= 0x7fffffff;
+    Val = GetValue(GuestRegs, ActionDetail, g_TempList, g_VariableList, Symbol);
+
+    CHAR PercentageChar = Format[Position];
+    CHAR IndicatorChar1 = Format[Position + 1];
+
+    /*
+    printf("position = %d is %c%c \n", Position, PercentageChar,
+           IndicatorChar1);
+           */
+
+    if (CurrentProcessedPositionFromStartOfFormat != Position) {
+
+      //
+      // There is some strings before this format specifier
+      // we should move it to the buffer
+      //
+      UINT32 StringLen = Position - CurrentProcessedPositionFromStartOfFormat;
+
+      //
+      // Check final buffer capacity
+      //
+      if (CurrentPositionInFinalBuffer + StringLen < sizeof(FinalBuffer)) {
+        memcpy(&FinalBuffer[CurrentPositionInFinalBuffer],
+               &Format[CurrentProcessedPositionFromStartOfFormat], StringLen);
+
+        CurrentProcessedPositionFromStartOfFormat += StringLen;
+        CurrentPositionInFinalBuffer += StringLen;
+      }
+    }
+
+    if (PercentageChar == '%') {
+      switch (IndicatorChar1) {
+      case 'd':
+        /* printf("decimal\n"); */
+        ApplyFormatSpecifier(
+            "%d", FinalBuffer, &CurrentProcessedPositionFromStartOfFormat,
+            &CurrentPositionInFinalBuffer, Val, sizeof(FinalBuffer));
+
+        break;
+      case 'x':
+        /* printf("hex\n"); */
+        ApplyFormatSpecifier(
+            "%x", FinalBuffer, &CurrentProcessedPositionFromStartOfFormat,
+            &CurrentPositionInFinalBuffer, Val, sizeof(FinalBuffer));
+
+        break;
+      case 's':
+        if (!ApplyStringFormatSpecifier(
+                "%s", FinalBuffer, &CurrentProcessedPositionFromStartOfFormat,
+                &CurrentPositionInFinalBuffer, Val, FALSE,
+                sizeof(FinalBuffer))) {
+          *HasError = TRUE;
+          return;
+        }
+
+        break;
+
+      default:
+        break;
+      }
+    }
+  }
+
+  if (WithoutAnyFormatSpecifier) {
+    //
+    // Means that it's just a simple print without any format specifier
+    //
+    if (LenOfFormats < sizeof(FinalBuffer)) {
+      memcpy(FinalBuffer, Format, LenOfFormats);
+    }
+  } else {
+
+    //
+    // Check if there is anything after the last format specifier
+    //
+    if (LenOfFormats > CurrentProcessedPositionFromStartOfFormat) {
+
+      UINT32 RemainedLen =
+          LenOfFormats - CurrentProcessedPositionFromStartOfFormat;
+
+      if (CurrentPositionInFinalBuffer + RemainedLen < sizeof(FinalBuffer)) {
+        memcpy(&FinalBuffer[CurrentPositionInFinalBuffer],
+               &Format[CurrentProcessedPositionFromStartOfFormat], RemainedLen);
+      }
+    }
+  }
+
+//
+// Print final result
+//
+#ifdef SCRIPT_ENGINE_USER_MODE
+  printf("Final Buffer : %s\n", FinalBuffer);
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-    // LogSimpleWithTag(Tag, ImmediateMessagePassing, "%s : %d\n", Name, Value);
+  LogSimpleWithTag(Tag, ImmediateMessagePassing, "%s\n", FinalBuffer);
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 }
 
@@ -747,6 +1003,7 @@ UINT64 GetPseudoRegValue(PSYMBOL Symbol, ACTION_BUFFER ActionBuffer) {
     // TODO: Add all the register
   }
 }
+
 UINT64 GetValue(PGUEST_REGS_USER_MODE GuestRegs, ACTION_BUFFER ActionBuffer,
                 UINT64 *g_TempList, UINT64 *g_VariableList, PSYMBOL Symbol) {
 
@@ -824,7 +1081,7 @@ BOOL ScriptEngineExecute(PGUEST_REGS_USER_MODE GuestRegs,
   UINT64 SrcVal0;
   UINT64 SrcVal1;
   UINT64 DesVal;
-  BOOL HasError = 0;
+  BOOL HasError = FALSE;
 
   Operator = (PSYMBOL)((unsigned long long)CodeBuffer->Head +
                        (unsigned long long)(*Indx * sizeof(SYMBOL)));
@@ -1435,8 +1692,9 @@ BOOL ScriptEngineExecute(PGUEST_REGS_USER_MODE GuestRegs,
       *Indx = *Indx + Src1->Value;
     }
     ScriptEngineFunctionPrintf(
-        ActionDetail.Tag, ActionDetail.ImmediatelySendTheResults,
-        (char *)&Src0->Value, Src1->Value, Src2, HasError);
+        GuestRegs, ActionDetail, g_TempList, g_VariableList, ActionDetail.Tag,
+        ActionDetail.ImmediatelySendTheResults, (char *)&Src0->Value,
+        Src1->Value, Src2, (BOOLEAN *)&HasError);
 
     return HasError;
   }

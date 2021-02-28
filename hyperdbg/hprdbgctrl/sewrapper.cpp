@@ -56,6 +56,7 @@ VOID ScriptEngineWrapperTestPerformAction(PGUEST_REGS_USER_MODE GuestRegs,
   // Test Parser
   //
   PSYMBOL_BUFFER CodeBuffer = ScriptEngineParse((char *)Expr.c_str());
+  PrintSymbolBuffer(CodeBuffer);
 
   UINT64 g_TempList[MAX_TEMP_COUNT] = {0};
   UINT64 g_VariableList[MAX_VAR_COUNT] = {0};
@@ -65,7 +66,6 @@ VOID ScriptEngineWrapperTestPerformAction(PGUEST_REGS_USER_MODE GuestRegs,
   if (CodeBuffer->Message == NULL) {
 
     for (int i = 0; i < CodeBuffer->Pointer;) {
-
 
       //
       // Fill the action buffer but as we're in user-mode here
@@ -117,6 +117,8 @@ VOID ScriptEngineWrapperTestParser(string Expr) {
 
   GUEST_REGS_USER_MODE GuestRegs = {0};
 
+  char test[] = "Hello world !";
+
   GuestRegs.rax = 0x1;
   GuestRegs.rcx = (UINT64)TestStruct;
   GuestRegs.rdx = 0x3;
@@ -132,7 +134,7 @@ VOID ScriptEngineWrapperTestParser(string Expr) {
   GuestRegs.r12 = 0xd;
   GuestRegs.r13 = 0xe;
   GuestRegs.r14 = 0xf;
-  GuestRegs.r15 = 0x10;
+  GuestRegs.r15 = (ULONG64)test;
 
   ScriptEngineWrapperTestPerformAction(&GuestRegs, Expr);
   free(TestStruct);

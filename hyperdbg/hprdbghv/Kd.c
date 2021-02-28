@@ -155,8 +155,14 @@ KdNmiCallback(PVOID Context, BOOLEAN Handled)
     // If we're here then it related to us
     // We set a flag to indicate that this core should be halted
     //
-    g_GuestState[CurrentCoreIndex].DebuggingState.WaitingForNmi                     = FALSE;
-    g_GuestState[CurrentCoreIndex].DebuggingState.IsGuestNeedsToBeHaltedFromVmxRoot = TRUE;
+    g_GuestState[CurrentCoreIndex].DebuggingState.WaitingForNmi = FALSE;
+
+    //
+    // This way of handling has a problem, sometimes the guest is not made the guest
+    // registers available and in those cases we pass null to the debugger, but in order
+    // to avoid complexity we handle it this way
+    //
+    KdHandleNmi(CurrentCoreIndex, g_GuestState[CurrentCoreIndex].DebuggingState.GuestRegs);
 
     //
     // Also, return true to show that it's handled
@@ -736,10 +742,20 @@ KdHandleBreakpointAndDebugBreakpoints(UINT32                            CurrentP
                                       PDEBUGGER_TRIGGERED_EVENT_DETAILS EventDetails)
 {
     //
+    // Lock handling breakpoints
+    //
+    SpinlockLock(&DebuggerHandleBreakpointLock);
+
+    //
     // Check if we should ignore this break request or not
     //
     if (g_IgnoreBreaksToDebugger.PauseBreaksUntilASpecialMessageSent)
     {
+        //
+        // Unlock the above core
+        //
+        SpinlockUnlock(&DebuggerHandleBreakpointLock);
+
         return;
     }
 
@@ -800,6 +816,11 @@ KdHandleBreakpointAndDebugBreakpoints(UINT32                            CurrentP
     //
     g_DebuggeeHaltContext = NULL;
     g_DebuggeeHaltTag     = NULL;
+
+    //
+    // Unlock handling breakpoints
+    //
+    SpinlockUnlock(&DebuggerHandleBreakpointLock);
 }
 
 /**
@@ -840,6 +861,9 @@ KdChangeCr3AndTriggerBreakpointHandler(UINT32                  CurrentProcessorI
 
 /**
  * @brief Handle NMI Vm-exits
+ * @param CurrentProcessorIndex
+ * @param GuestRegs
+ * 
  * @details This function should be called in vmx-root mode
  * @return VOID 
  */
