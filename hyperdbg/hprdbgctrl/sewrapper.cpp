@@ -56,6 +56,7 @@ VOID ScriptEngineWrapperTestPerformAction(PGUEST_REGS_USER_MODE GuestRegs,
   // Test Parser
   //
   PSYMBOL_BUFFER CodeBuffer = ScriptEngineParse((char *)Expr.c_str());
+  PrintSymbolBuffer(CodeBuffer);
 
   UINT64 g_TempList[MAX_TEMP_COUNT] = {0};
   UINT64 g_VariableList[MAX_VAR_COUNT] = {0};
@@ -118,7 +119,9 @@ VOID ScriptEngineWrapperTestParser(string Expr) {
   GUEST_REGS_USER_MODE GuestRegs = {0};
 
   char test[] = "Hello world !";
-  wchar_t testw[] = L"Wide Char Hello world wchar_t !";
+  wchar_t testw[] =
+      L"A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0 1 2 3 4 5 6 7 8 "
+      L"9 a b c d e f g h i j k l m n o p q r s t u v w x y z";
 
   GuestRegs.rax = 0x1;
   GuestRegs.rcx = (UINT64)TestStruct;
