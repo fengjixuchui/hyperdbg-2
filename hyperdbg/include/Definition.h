@@ -248,6 +248,34 @@ typedef int (*Callback)(const char *Text);
 //////////////////////////////////////////////////
 
 /**
+ * @brief Integer gp registers (this structure is defined in
+ * two places, make sure to change it in two places)
+ *
+ */
+#ifndef GUEST_REGS_DEFINED
+#define GUEST_REGS_DEFINED
+
+typedef struct GUEST_REGS {
+  ULONG64 rax; // 0x00
+  ULONG64 rcx; // 0x08
+  ULONG64 rdx; // 0x10
+  ULONG64 rbx; // 0x18
+  ULONG64 rsp; // 0x20
+  ULONG64 rbp; // 0x28
+  ULONG64 rsi; // 0x30
+  ULONG64 rdi; // 0x38
+  ULONG64 r8;  // 0x40
+  ULONG64 r9;  // 0x48
+  ULONG64 r10; // 0x50
+  ULONG64 r11; // 0x58
+  ULONG64 r12; // 0x60
+  ULONG64 r13; // 0x68
+  ULONG64 r14; // 0x70
+  ULONG64 r15; // 0x78
+} GUEST_REGS, *PGUEST_REGS;
+#endif
+
+/**
  * @brief enum to show type of all HyperDbg events
  *
  */
@@ -1178,37 +1206,6 @@ typedef struct _DEBUGGEE_SCRIPT_PACKET {
 } DEBUGGEE_SCRIPT_PACKET, *PDEBUGGEE_SCRIPT_PACKET;
 
 /**
- * @brief Enum for registers
- *
- */
-typedef enum REGS_ENUM {
-  REGISTER_RAX = 1,
-  REGISTER_RBX = 2,
-  REGISTER_RCX = 3,
-  REGISTER_RDX = 4,
-  REGISTER_RSI = 5,
-  REGISTER_RDI = 6,
-  REGISTER_RBP = 7,
-  REGISTER_RSP = 8,
-  REGISTER_R8 = 9,
-  REGISTER_R9 = 10,
-  REGISTER_R10 = 11,
-  REGISTER_R11 = 12,
-  REGISTER_R12 = 13,
-  REGISTER_R13 = 14,
-  REGISTER_R14 = 15,
-  REGISTER_R15 = 16,
-  REGISTER_DS = 17,
-  REGISTER_ES = 18,
-  REGISTER_FS = 19,
-  REGISTER_GS = 20,
-  REGISTER_CS = 21,
-  REGISTER_SS = 22,
-  REGISTER_EFLAGS = 23,
-  REGISTER_RIP = 24
-} REGS_ENUM;
-
-/**
  * @brief map register name to its enum.
  *
  */
@@ -1218,12 +1215,18 @@ static const char *const RegistersNames[] = {
     "ds",  "es",  "fs",  "gs",  "cs",  "ss",  "eflags", "rip"};
 
 /**
+ * @brief for reading all regisers in r command.
+ *
+ */
+#define DEBUGGEE_SHOW_ALL_REGISTERS 0xffffffff
+
+/**
  * @brief Register Descriptor Structure to use in r command.
  *
  */
 typedef struct _DEBUGGEE_REGISTER_READ_DESCRIPTION {
 
-  REGS_ENUM RegisterID;
+  UINT32 RegisterID; // the number is from REGS_ENUM
   UINT64 Value;
   UINT32 KernelStatus;
 

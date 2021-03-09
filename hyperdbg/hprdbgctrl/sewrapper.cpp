@@ -49,14 +49,14 @@ void PrintSymbolBufferWrapper(PVOID SymbolBuffer) {
 //
 // test function
 //
-VOID ScriptEngineWrapperTestPerformAction(PGUEST_REGS_USER_MODE GuestRegs,
+VOID ScriptEngineWrapperTestPerformAction(PGUEST_REGS GuestRegs,
                                           string Expr) {
 
   //
   // Test Parser
   //
   PSYMBOL_BUFFER CodeBuffer = ScriptEngineParse((char *)Expr.c_str());
-  PrintSymbolBuffer(CodeBuffer);
+  
 
   UINT64 g_TempList[MAX_TEMP_COUNT] = {0};
   UINT64 g_VariableList[MAX_VAR_COUNT] = {0};
@@ -116,7 +116,7 @@ VOID ScriptEngineWrapperTestParser(string Expr) {
   TestStruct->Var1 = 0x41414141;
   TestStruct->Var3 = 0x4242424242424242;
 
-  GUEST_REGS_USER_MODE GuestRegs = {0};
+  GUEST_REGS GuestRegs = {0};
 
   char test[] = "Hello world !";
   wchar_t testw[] =

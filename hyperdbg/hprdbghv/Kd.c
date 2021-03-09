@@ -429,14 +429,19 @@ KdRecvBuffer(CHAR *   BufferToSave,
 /**
  * @brief continue the debuggee, this function gurantees that all other cores
  * are continued (except current core)
- * @param 
+ * @param CurrentCore
+ * @param SpeialEventResponse
+ * @param PauseBreaksUntilASpecialMessageSent
  * 
  * @return VOID 
  */
 VOID
-KdContinueDebuggee(BOOLEAN PauseBreaksUntilASpecialMessageSent, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION SpeialEventResponse)
+KdContinueDebuggee(UINT32                                  CurrentCore,
+                   BOOLEAN                                 PauseBreaksUntilASpecialMessageSent,
+                   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION SpeialEventResponse)
 {
-    ULONG CoreCount;
+    ULONG  CoreCount;
+    RFLAGS Rflags = {0};
 
     CoreCount = KeQueryActiveProcessorCount(0);
 
@@ -444,6 +449,24 @@ KdContinueDebuggee(BOOLEAN PauseBreaksUntilASpecialMessageSent, DEBUGGER_REMOTE_
     {
         g_IgnoreBreaksToDebugger.PauseBreaksUntilASpecialMessageSent = TRUE;
         g_IgnoreBreaksToDebugger.SpeialEventResponse                 = SpeialEventResponse;
+    }
+
+    //
+    // Check if we should enable RFLAGS.IF in this core or not,
+    // we have another same check in SWITCHING CORES too
+    //
+
+    if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
+    {
+        //eshtebas chon roo ye core dg darim rflag core e jario set mikonim
+
+        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+        Rflags.InterruptEnableFlag = TRUE;
+
+        __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+        g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue = FALSE;
     }
 
     //
@@ -611,6 +634,12 @@ KdReadRegisters(PGUEST_REGS Regs, PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegist
 {
     switch (ReadRegisterRequest->RegisterID)
     {
+    case DEBUGGEE_SHOW_ALL_REGISTERS:
+        memcpy((void *)((CHAR *)ReadRegisterRequest + sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION)),
+               Regs,
+               sizeof(GUEST_REGS));
+        break;
+
     case REGISTER_RAX:
         ReadRegisterRequest->Value = Regs->rax;
         break;
@@ -723,7 +752,8 @@ KdReadRegisters(PGUEST_REGS Regs, PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegist
 BOOLEAN
 KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
 {
-    ULONG CoreCount;
+    ULONG  CoreCount;
+    RFLAGS Rflags = {0};
 
     CoreCount = KeQueryActiveProcessorCount(0);
 
@@ -741,6 +771,22 @@ KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
     //
     // *** Core is valid ***
     //
+
+    //
+    // Check if we should enable RFLAGS.IF in this core or not
+    //
+    if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
+    {
+        //eshtebas chon roo ye core dg darim rflag core e jario set mikonim
+
+        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+        Rflags.InterruptEnableFlag = TRUE;
+
+        __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+        g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue = FALSE;
+    }
 
     //
     // Unset the current operating core (this is not important as if we
@@ -1006,6 +1052,8 @@ KdHandleNmi(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
 VOID
 KdStepInstruction(ULONG CoreId)
 {
+    RFLAGS Rflags = {0};
+
     //
     // Set an indicator of wait for MTF
     //
@@ -1015,6 +1063,23 @@ KdStepInstruction(ULONG CoreId)
     // Not unset again
     //
     g_GuestState[CoreId].IgnoreMtfUnset = TRUE;
+
+    //
+    // Change guest rflags if needed to avoid interrupts on intr pin
+    //
+    if (!g_GuestState[CoreId].DebuggingState.EnableInterruptFlagOnContinue)
+    {
+        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+        if (Rflags.InterruptEnableFlag == TRUE)
+        {
+            Rflags.InterruptEnableFlag = FALSE;
+
+            __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+            g_GuestState[CoreId].DebuggingState.EnableInterruptFlagOnContinue = TRUE;
+        }
+    }
 
     //
     // Set the MTF flag
@@ -1195,6 +1260,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET EventRegPacket;
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET AddActionPacket;
     PDEBUGGER_MODIFY_EVENTS                             QueryAndModifyEventPacket;
+    UINT32                                              SizeToSend       = 0;
     BOOLEAN                                             UnlockTheNewCore = FALSE;
 
     while (TRUE)
@@ -1252,7 +1318,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 //
                 // Unlock other cores
                 //
-                KdContinueDebuggee(FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
+                KdContinueDebuggee(CurrentCore, FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
 
                 //
                 // No need to wait for new commands
@@ -1290,7 +1356,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 //
                 // Unlock other cores
                 //
-                KdContinueDebuggee(FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
+                KdContinueDebuggee(CurrentCore, FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
 
                 //
                 // No need to wait for new commands
@@ -1390,13 +1456,21 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                     ReadRegisterPacket->KernelStatus = DEBUGGER_ERROR_INVALID_REGISTER_NUMBER;
                 }
 
+                if (ReadRegisterPacket->RegisterID == DEBUGGEE_SHOW_ALL_REGISTERS)
+                {
+                    SizeToSend = sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION) + sizeof(GUEST_REGS);
+                }
+                else
+                {
+                    SizeToSend = sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION);
+                }
                 //
                 // Send the result of reading registers back to the debuggee
                 //
                 KdResponsePacketToDebugger(DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGEE_TO_DEBUGGER,
                                            DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_READING_REGISTERS,
                                            ReadRegisterPacket,
-                                           sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION));
+                                           SizeToSend);
 
                 break;
 
@@ -1478,7 +1552,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 //
                 // Continue Debuggee
                 //
-                KdContinueDebuggee(FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
+                KdContinueDebuggee(CurrentCore, FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
                 EscapeFromTheLoop = TRUE;
 
                 break;
@@ -1496,8 +1570,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 //
                 // Continue Debuggee
                 //
-                KdContinueDebuggee(TRUE,
-                                   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_REGISTERING_EVENT);
+                KdContinueDebuggee(CurrentCore, TRUE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_REGISTERING_EVENT);
                 EscapeFromTheLoop = TRUE;
 
                 break;
@@ -1515,8 +1588,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 //
                 // Continue Debuggee
                 //
-                KdContinueDebuggee(TRUE,
-                                   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_ADDING_ACTION_TO_EVENT);
+                KdContinueDebuggee(CurrentCore, TRUE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_ADDING_ACTION_TO_EVENT);
                 EscapeFromTheLoop = TRUE;
 
                 break;
@@ -1539,8 +1611,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                     //
                     // Continue Debuggee
                     //
-                    KdContinueDebuggee(TRUE,
-                                       DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_QUERY_AND_MODIFY_EVENT);
+                    KdContinueDebuggee(CurrentCore, TRUE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_QUERY_AND_MODIFY_EVENT);
                     EscapeFromTheLoop = TRUE;
                 }
                 else
