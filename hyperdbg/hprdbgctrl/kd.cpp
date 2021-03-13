@@ -286,7 +286,8 @@ BOOLEAN KdSendFlushPacketToDebuggee() {
  *
  * @return BOOLEAN
  */
-BOOLEAN KdSendReadRegisterPacketToDebuggee(PDEBUGGEE_REGISTER_READ_DESCRIPTION RegDes) {
+BOOLEAN
+KdSendReadRegisterPacketToDebuggee(PDEBUGGEE_REGISTER_READ_DESCRIPTION RegDes) {
 
   //
   // Send r command as read register packet
@@ -481,6 +482,66 @@ BOOLEAN KdSendSwitchProcessPacketToDebuggee(BOOLEAN GetRemotePid,
 }
 
 /**
+ * @brief Sends a breakpoint set or 'bp' command packet to the debuggee
+ * @param BpPacket
+ *
+ * @return BOOLEAN
+ */
+BOOLEAN KdSendBpPacketToDebuggee(PDEBUGGEE_BP_PACKET BpPacket) {
+
+  //
+  // Send 'bp' as a breakpoint packet
+  //
+  if (!KdCommandPacketAndBufferToDebuggee(
+          DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGER_TO_DEBUGGEE_EXECUTE_ON_VMX_ROOT,
+          DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_BP,
+          (CHAR *)BpPacket, sizeof(DEBUGGEE_BP_PACKET))) {
+    return FALSE;
+  }
+
+  //
+  // Wait until the result of putting breakpoint is received
+  //
+  WaitForSingleObject(
+      g_SyncronizationObjectsHandleTable[DEBUGGER_SYNCRONIZATION_OBJECT_BP],
+      INFINITE);
+
+  return TRUE;
+}
+
+/**
+ * @brief Sends a breakpoint list or modification packet to the debuggee
+ * @param ListOrModifyPacket
+ *
+ * @return BOOLEAN
+ */
+BOOLEAN
+KdSendListOrModifyPacketToDebuggee(
+    PDEBUGGEE_BP_LIST_OR_MODIFY_PACKET ListOrModifyPacket) {
+
+  //
+  // Send list or modify breakpoint packet
+  //
+  if (!KdCommandPacketAndBufferToDebuggee(
+          DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGER_TO_DEBUGGEE_EXECUTE_ON_VMX_ROOT,
+          DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_LIST_OR_MODIFY_BREAKPOINTS,
+          (CHAR *)ListOrModifyPacket,
+          sizeof(DEBUGGEE_BP_LIST_OR_MODIFY_PACKET))) {
+    return FALSE;
+  }
+
+  //
+  // Wait until the result of listing or modifying breakpoints is received
+  //
+  WaitForSingleObject(
+      g_SyncronizationObjectsHandleTable
+          [DEBUGGER_SYNCRONIZATION_OBJECT_LIST_OR_MODIFY_BREAKPOINTS],
+      INFINITE);
+
+  return TRUE;
+}
+
+/**
  * @brief Sends a script packet to the debuggee
  * @param BufferAddress
  * @param BufferLength
@@ -611,12 +672,21 @@ BOOLEAN KdSendUserInputPacketToDebuggee(const char *Sendbuf, int Len) {
 BOOLEAN
 KdSendStepPacketToDebuggee(DEBUGGER_REMOTE_STEPPING_REQUEST StepRequestType) {
 
+  DEBUGGEE_STEP_PACKET StepPacket = {0};
+
+  //
+  // Set the type of step packet
+  //
+  StepPacket.StepType = StepRequestType;
+
   //
   // Send step packet to the serial
   //
-  if (!KdCommandPacketToDebuggee(
+  if (!KdCommandPacketAndBufferToDebuggee(
           DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGER_TO_DEBUGGEE_EXECUTE_ON_VMX_ROOT,
-          DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_MODE_STEP)) {
+          DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_MODE_STEP,
+          (CHAR *)&StepPacket, sizeof(DEBUGGEE_STEP_PACKET))) {
+
     return FALSE;
   }
 

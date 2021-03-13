@@ -1,6 +1,7 @@
 /**
  * @file listening.cpp
  * @author Sina Karvandi (sina@rayanfam.com)
+ * @author Alee Amini (aleeaminiz@gmail.com)
  * @brief Listening for remote connections
  * @details
  * @version 0.1
@@ -47,7 +48,10 @@ BOOLEAN ListeningSerialPortInDebugger() {
   PDEBUGGEE_CHANGE_PROCESS_PACKET ChangeProcessPacket;
   PDEBUGGER_FLUSH_LOGGING_BUFFERS FlushPacket;
   PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegisterPacket;
+  PDEBUGGEE_BP_PACKET BpPacket;
+  PDEBUGGEE_BP_LIST_OR_MODIFY_PACKET ListOrModifyBreakpointPacket;
   PGUEST_REGS Regs;
+  PGUEST_EXTRA_REGISTERS ExtraRegs;
 
 StartAgain:
 
@@ -475,25 +479,43 @@ StartAgain:
 
           Regs = (GUEST_REGS *)(((CHAR *)ReadRegisterPacket) +
                                 sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION));
+          ExtraRegs = (GUEST_EXTRA_REGISTERS
+                           *)(((CHAR *)ReadRegisterPacket) +
+                              sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION) +
+                              sizeof(GUEST_REGS));
 
-          ShowMessages("rax=%016llx rbx=%016llx rcx=%016llx\n"
-                       "rdx=%016llx rsi=% 016llx rdi=%016llx\n"
-                       "rsp=%016llx rbp=%016llx r8=%016llx\n"
-                       "r9=%016llx r10=%016llx r11=%016llx\n"
-                       "r12=%016llx r13=%016llx r14=%016llx\nr15=%016llx\n",
-                       Regs->rax, Regs->rbx, Regs->rcx, Regs->rdx, Regs->rsi,
-                       Regs->rdi, Regs->rsp, Regs->rbp, Regs->r8, Regs->r9,
-                       Regs->r10, Regs->r11, Regs->r12, Regs->r13, Regs->r14,
-                       Regs->r15);
+          RFLAGS Rflags = {0};
+          Rflags.Value = ExtraRegs->RFLAGS;
+
+          ShowMessages(
+              "RAX=%016llx RBX=%016llx RCX=%016llx\n"
+              "RDX=%016llx RSI=% 016llx RDI=%016llx\n"
+              "RIP=%016llx RSP=%016llx RBP=%016llx\n"
+              "R8=%016llx  R9=%016llx  R10=%016llx\n"
+              "R11=%016llx R12=%016llx R13=%016llx\n"
+              "R14=%016llx R15=%016llx IOPL=%02x\n"
+              "%s  %s  %s  %s\n%s  %s  %s  %s  \n"
+              "CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n"
+              "RFLAGS=%016llx\n",
+              Regs->rax, Regs->rbx, Regs->rcx, Regs->rdx, Regs->rsi, Regs->rdi,
+              ExtraRegs->RIP, Regs->rsp, Regs->rbp, Regs->r8, Regs->r9,
+              Regs->r10, Regs->r11, Regs->r12, Regs->r13, Regs->r14, Regs->r15,
+              Rflags.IoPrivilegeLevel, Rflags.OverflowFlag ? "OF 1" : "OF 0",
+              Rflags.DirectionFlag ? "DF 1" : "DF 0",
+              Rflags.InterruptEnableFlag ? "IF 1" : "IF 0",
+              Rflags.SignFlag ? "SF  1" : "SF  0",
+              Rflags.ZeroFlag ? "ZF 1" : "ZF 0",
+              Rflags.ParityFlag ? "PF 1" : "PF 0",
+              Rflags.CarryFlag ? "CF 1" : "CF 0",
+              Rflags.AuxiliaryCarryFlag ? "AXF 1" : "AXF 0", ExtraRegs->CS,
+              ExtraRegs->SS, ExtraRegs->DS, ExtraRegs->ES, ExtraRegs->FS,
+              ExtraRegs->GS, ExtraRegs->RFLAGS);
 
         } else {
-          ShowMessages(
-              "%s=%016llx\n",
-              RegistersNames[ReadRegisterPacket->RegisterID -
-                             1 /*this is due to RegistersEnum starts from 1 and
-                                  RegistersNames array starts from 0*/
-          ],
-              ReadRegisterPacket->Value);
+
+          ShowMessages("%s=%016llx\n",
+                       RegistersNames[ReadRegisterPacket->RegisterID],
+                       ReadRegisterPacket->Value);
         }
 
       } else {
@@ -507,6 +529,56 @@ StartAgain:
                    [DEBUGGER_SYNCRONIZATION_OBJECT_READ_REGISTERS]);
 
       break;
+
+    case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_BP:
+
+      BpPacket = (DEBUGGEE_BP_PACKET *)(((CHAR *)TheActualPacket) +
+                                        sizeof(DEBUGGER_REMOTE_PACKET));
+
+      if (BpPacket->Result == DEBUGEER_OPERATION_WAS_SUCCESSFULL) {
+
+        //
+        // Everything was okay, nothing to do
+        //
+
+      } else {
+        ShowErrorMessage(BpPacket->Result);
+      }
+
+      //
+      // Signal the event relating to receiving result of putting breakpoints
+      //
+      SetEvent(g_SyncronizationObjectsHandleTable
+                   [DEBUGGER_SYNCRONIZATION_OBJECT_BP]);
+
+      break;
+
+    case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_LIST_OR_MODIFY_BREAKPOINTS:
+
+      ListOrModifyBreakpointPacket =
+          (DEBUGGEE_BP_LIST_OR_MODIFY_PACKET *)(((CHAR *)TheActualPacket) +
+                                                sizeof(DEBUGGER_REMOTE_PACKET));
+
+      if (ListOrModifyBreakpointPacket->Result ==
+          DEBUGEER_OPERATION_WAS_SUCCESSFULL) {
+
+        //
+        // Everything was okay, nothing to do
+        //
+
+      } else {
+        ShowErrorMessage(ListOrModifyBreakpointPacket->Result);
+      }
+
+      //
+      // Signal the event relating to receiving result of modifying or listing
+      // breakpoints
+      //
+      SetEvent(g_SyncronizationObjectsHandleTable
+                   [DEBUGGER_SYNCRONIZATION_OBJECT_LIST_OR_MODIFY_BREAKPOINTS]);
+
+      break;
+
     default:
       ShowMessages("err, unknown packet action received from the debugger\n");
       break;

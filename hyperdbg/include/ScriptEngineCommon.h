@@ -37,8 +37,9 @@ UINT32
 VmxrootCompatibleWcslen(const wchar_t *S);
 
 BOOLEAN
-MemoryMapperReadMemorySafe(UINT64 VaAddressToRead, PVOID BufferToSaveMemory,
-                           SIZE_T SizeToRead);
+MemoryMapperReadMemorySafeOnTargetProcess(UINT64 VaAddressToRead,
+                                          PVOID BufferToSaveMemory,
+                                          SIZE_T SizeToRead);
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
@@ -134,7 +135,7 @@ UINT64 GetValue(PGUEST_REGS GuestRegs, ACTION_BUFFER ActionBuffer,
                 UINT64 *g_TempList, UINT64 *g_VariableList, PSYMBOL Symbol);
 
 //
-// Pseudo registers
+// *** Pseudo registers ***
 //
 // $tid
 UINT64 ScriptEnginePseudoRegGetTid() {
@@ -382,12 +383,14 @@ BOOLEAN ScriptEngineCheckAddressValidity(PUINT64 Address, UINT32 Length) {
 }
 
 //
-// Keywords
+// *** Keywords ***
 //
 
 // poi
 UINT64 ScriptEngineKeywordPoi(PUINT64 Address, BOOL *HasError) {
 
+  UINT64 Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
   if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
@@ -398,12 +401,22 @@ UINT64 ScriptEngineKeywordPoi(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  return *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(UINT64));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+  return Result;
 }
 
 // hi
 WORD ScriptEngineKeywordHi(PUINT64 Address, BOOL *HasError) {
 
+  QWORD Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
   if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
@@ -414,13 +427,22 @@ WORD ScriptEngineKeywordHi(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  QWORD Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(UINT64));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return HIWORD(Result);
 }
 
 // low
 WORD ScriptEngineKeywordLow(PUINT64 Address, BOOL *HasError) {
 
+  QWORD Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
   if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
@@ -431,16 +453,25 @@ WORD ScriptEngineKeywordLow(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  QWORD Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(UINT64));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return LOWORD(Result);
 }
 
 // db
 BYTE ScriptEngineKeywordDb(PUINT64 Address, BOOL *HasError) {
 
+  BYTE Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
+  if (!CheckMemoryAccessSafety(Address, sizeof(BYTE))) {
     *HasError = TRUE;
 
     return NULL;
@@ -448,16 +479,25 @@ BYTE ScriptEngineKeywordDb(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  BYTE Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(BYTE));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return Result;
 }
 
 // dd
 WORD ScriptEngineKeywordDd(PUINT64 Address, BOOL *HasError) {
 
+  WORD Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
+  if (!CheckMemoryAccessSafety(Address, sizeof(WORD))) {
     *HasError = TRUE;
 
     return NULL;
@@ -465,16 +505,25 @@ WORD ScriptEngineKeywordDd(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  WORD Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(WORD));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return Result;
 }
 
 // dw
 DWORD ScriptEngineKeywordDw(PUINT64 Address, BOOL *HasError) {
 
+  DWORD Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
+  if (!CheckMemoryAccessSafety(Address, sizeof(DWORD))) {
     *HasError = TRUE;
 
     return NULL;
@@ -482,16 +531,25 @@ DWORD ScriptEngineKeywordDw(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  DWORD Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(DWORD));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return Result;
 }
 
 // dq
 QWORD ScriptEngineKeywordDq(PUINT64 Address, BOOL *HasError) {
 
+  QWORD Result = NULL;
+
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
 
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
+  if (!CheckMemoryAccessSafety(Address, sizeof(DWORD))) {
     *HasError = TRUE;
 
     return NULL;
@@ -499,61 +557,21 @@ QWORD ScriptEngineKeywordDq(PUINT64 Address, BOOL *HasError) {
 
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
-  QWORD Result = *Address;
+#ifdef SCRIPT_ENGINE_USER_MODE
+  Result = *Address;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+  MemoryMapperReadMemorySafeOnTargetProcess(Address, &Result, sizeof(QWORD));
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
   return Result;
 }
 
-// str
-CHAR *ScriptEngineKeywordStr(CHAR *Address, BOOL *HasError) {
-
-#ifdef SCRIPT_ENGINE_KERNEL_MODE
-
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
-    *HasError = TRUE;
-
-    return NULL;
-  }
-
-#endif // SCRIPT_ENGINE_KERNEL_MODE
-
-  UINT64 Len = 0;
-
-  Len = strlen(Address) + 1;
-
-  if (Len == 1) {
-    return NULL;
-  } else {
-    return Address;
-  }
-}
-
-// wstr
-WCHAR *ScriptEngineKeywordWstr(WCHAR *Address, BOOL *HasError) {
-
-#ifdef SCRIPT_ENGINE_KERNEL_MODE
-
-  if (!CheckMemoryAccessSafety(Address, sizeof(UINT64))) {
-    *HasError = TRUE;
-
-    return NULL;
-  }
-
-#endif // SCRIPT_ENGINE_KERNEL_MODE
-
-  UINT64 Len = 0;
-
-  Len = wcslen(Address) + 1;
-
-  if (Len == 1) {
-    return NULL;
-  } else {
-    return Address;
-  }
-}
-
 //
-// Functions
+// *** Functions ***
 //
+
 VOID ScriptEngineFunctionPrint(UINT64 Tag, BOOLEAN ImmediateMessagePassing,
                                UINT64 Value) {
 
@@ -840,9 +858,9 @@ ApplyStringFormatSpecifier(const CHAR *CurrentSpecifier, CHAR *FinalBuffer,
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-        MemoryMapperReadMemorySafe((void *)(Val + (i * sizeof(WstrBuffer))),
-                                   WstrBuffer,
-                                   StringSizeInByte % sizeof(WstrBuffer));
+        MemoryMapperReadMemorySafeOnTargetProcess(
+            (void *)(Val + (i * sizeof(WstrBuffer))), WstrBuffer,
+            StringSizeInByte % sizeof(WstrBuffer));
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
       } else {
@@ -857,8 +875,9 @@ ApplyStringFormatSpecifier(const CHAR *CurrentSpecifier, CHAR *FinalBuffer,
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-        MemoryMapperReadMemorySafe((void *)(Val + (i * sizeof(WstrBuffer))),
-                                   WstrBuffer, sizeof(WstrBuffer));
+        MemoryMapperReadMemorySafeOnTargetProcess(
+            (void *)(Val + (i * sizeof(WstrBuffer))), WstrBuffer,
+            sizeof(WstrBuffer));
 #endif // SCRIPT_ENGINE_KERNEL_MODE
       }
 
@@ -891,8 +910,8 @@ ApplyStringFormatSpecifier(const CHAR *CurrentSpecifier, CHAR *FinalBuffer,
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-    MemoryMapperReadMemorySafe(Val, &FinalBuffer[*CurrentPositionInFinalBuffer],
-                               StringSize);
+    MemoryMapperReadMemorySafeOnTargetProcess(
+        Val, &FinalBuffer[*CurrentPositionInFinalBuffer], StringSize);
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
     *CurrentPositionInFinalBuffer += StringSize;
@@ -1149,45 +1168,176 @@ VOID ScriptEngineFunctionPrintf(PGUEST_REGS GuestRegs,
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 }
 
-UINT64 GetRegValue(PGUEST_REGS GuestRegs, PSYMBOL Symbol) {
-  switch (Symbol->Value) {
+UINT64 GetRegValue(PGUEST_REGS GuestRegs, REGS_ENUM RegId) {
+
+  switch (RegId) {
+
   case REGISTER_RAX:
     return GuestRegs->rax;
+    break;
+
   case REGISTER_RCX:
     return GuestRegs->rcx;
+    break;
+
   case REGISTER_RDX:
     return GuestRegs->rdx;
+    break;
+
   case REGISTER_RBX:
     return GuestRegs->rbx;
+    break;
+
   case REGISTER_RSP:
     return GuestRegs->rsp;
+    break;
+
   case REGISTER_RBP:
     return GuestRegs->rbp;
+    break;
+
   case REGISTER_RSI:
     return GuestRegs->rsi;
+    break;
+
   case REGISTER_RDI:
     return GuestRegs->rdi;
+    break;
+
   case REGISTER_R8:
     return GuestRegs->r8;
+    break;
+
   case REGISTER_R9:
     return GuestRegs->r9;
+    break;
+
   case REGISTER_R10:
     return GuestRegs->r10;
+    break;
+
   case REGISTER_R11:
     return GuestRegs->r11;
+    break;
+
   case REGISTER_R12:
     return GuestRegs->r12;
+    break;
+
   case REGISTER_R13:
     return GuestRegs->r13;
+    break;
+
   case REGISTER_R14:
     return GuestRegs->r14;
+    break;
+
   case REGISTER_R15:
     return GuestRegs->r15;
+    break;
+
+  case REGISTER_DS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestDs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_ES:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestEs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_FS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestFs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_GS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestGs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_CS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestCs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_SS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestSs().SEL;
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_RFLAGS:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestRFlags();
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
+  case REGISTER_RIP:
+
+#ifdef SCRIPT_ENGINE_USER_MODE
+    return NULL;
+#endif // SCRIPT_ENGINE_USER_MODE
+
+#ifdef SCRIPT_ENGINE_KERNEL_MODE
+    return GetGuestRIP();
+#endif // SCRIPT_ENGINE_KERNEL_MODE
+
+    break;
+
   case INVALID:
 #ifdef SCRIPT_ENGINE_USER_MODE
     ShowMessages("Error in reading regesiter");
 #endif // SCRIPT_ENGINE_USER_MODE
     return INVALID;
+    break;
     // TODO: Add all the register
   }
 }
@@ -1236,7 +1386,7 @@ UINT64 GetValue(PGUEST_REGS GuestRegs, ACTION_BUFFER ActionBuffer,
   case SYMBOL_NUM_TYPE:
     return Symbol->Value;
   case SYMBOL_REGISTER_TYPE:
-    return GetRegValue(GuestRegs, Symbol);
+    return GetRegValue(GuestRegs, (REGS_ENUM)Symbol->Value);
   case SYMBOL_PSEUDO_REG_TYPE:
     return GetPseudoRegValue(Symbol, ActionBuffer);
   case SYMBOL_TEMP_TYPE:
@@ -1295,7 +1445,6 @@ VOID SetRegValue(PGUEST_REGS GuestRegs, PSYMBOL Symbol, UINT64 Value) {
     break;
   }
 }
-
 
 VOID SetValue(PGUEST_REGS GuestRegs, UINT64 *g_TempList, UINT64 *g_VariableList,
               PSYMBOL Symbol, UINT64 Value) {

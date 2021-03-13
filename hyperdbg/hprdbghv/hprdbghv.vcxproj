@@ -103,6 +103,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Apic.c" />
+    <ClCompile Include="BreakpointCommands.c" />
     <ClCompile Include="Broadcast.c" />
     <ClCompile Include="Counters.c" />
     <ClCompile Include="CrossVmexits.c" />
@@ -133,7 +134,7 @@
     <ClCompile Include="MemoryManager.c" />
     <ClCompile Include="MemoryMapper.c" />
     <ClCompile Include="PoolManager.c" />
-    <ClCompile Include="SegmentRegs.c" />
+    <ClCompile Include="ManageRegs.c" />
     <ClCompile Include="Spinlock.c" />
     <ClCompile Include="SsdtHook.c" />
     <ClCompile Include="VmxRegions.c" />
@@ -154,6 +155,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apic.h" />
+    <ClInclude Include="BreakpointCommands.h" />
     <ClInclude Include="Broadcast.h" />
     <ClInclude Include="Counters.h" />
     <ClInclude Include="Debugger.h" />
@@ -166,6 +168,7 @@
     <ClInclude Include="GdbStub.h" />
     <ClInclude Include="GlobalVariables.h" />
     <ClInclude Include="Kd.h" />
+    <ClInclude Include="ManageRegs.h" />
     <ClInclude Include="Mtf.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Hooks.h" />

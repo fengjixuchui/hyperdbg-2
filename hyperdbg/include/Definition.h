@@ -103,6 +103,16 @@
 #define COMMUNICATION_BUFFER_SIZE PacketChunkSize + 0x100
 
 //////////////////////////////////////////////////
+//            Breakpoint Backup                 //
+//////////////////////////////////////////////////
+
+/**
+ * @brief maximum number of buffers to be allocated for a single
+ * breakpoint
+ */
+#define MAXIMUM_BREAKPOINTS_WITHOUT_CONTINUE 50
+
+//////////////////////////////////////////////////
 //                   Installer                  //
 //////////////////////////////////////////////////
 
@@ -205,6 +215,8 @@
 #define DEBUGGER_SYNCRONIZATION_OBJECT_ADD_ACTION_TO_EVENT 0xa
 #define DEBUGGER_SYNCRONIZATION_OBJECT_MODIFY_AND_QUERY_EVENT 0xb
 #define DEBUGGER_SYNCRONIZATION_OBJECT_READ_REGISTERS 0xc
+#define DEBUGGER_SYNCRONIZATION_OBJECT_BP 0xd
+#define DEBUGGER_SYNCRONIZATION_OBJECT_LIST_OR_MODIFY_BREAKPOINTS 0xe
 
 //////////////////////////////////////////////////
 //            End of Buffer Detection           //
@@ -255,7 +267,15 @@ typedef int (*Callback)(const char *Text);
 #ifndef GUEST_REGS_DEFINED
 #define GUEST_REGS_DEFINED
 
+//
+// DO NOT FUCKING TOUCH THIS STRUCTURE WITHOUT COORDINATION WITH SINA
+//
 typedef struct GUEST_REGS {
+
+  //
+  // DO NOT FUCKING TOUCH THIS STRUCTURE WITHOUT COORDINATION WITH SINA
+  //
+
   ULONG64 rax; // 0x00
   ULONG64 rcx; // 0x08
   ULONG64 rdx; // 0x10
@@ -272,8 +292,60 @@ typedef struct GUEST_REGS {
   ULONG64 r13; // 0x68
   ULONG64 r14; // 0x70
   ULONG64 r15; // 0x78
+
+  //
+  // DO NOT FUCKING TOUCH THIS STRUCTURE WITHOUT COORDINATION WITH SINA
+  //
+
 } GUEST_REGS, *PGUEST_REGS;
 #endif
+
+/**
+ * @brief struct for extra registers
+ *
+ */
+typedef struct GUEST_EXTRA_REGISTERS {
+  USHORT CS;
+  USHORT DS;
+  USHORT FS;
+  USHORT GS;
+  USHORT ES;
+  USHORT SS;
+  UINT64 RFLAGS;
+  UINT64 RIP;
+} GUEST_EXTRA_REGISTERS, *PGUEST_EXTRA_REGISTERS;
+
+/**
+ * @brief RFLAGS in structure format
+ *
+ */
+typedef union _RFLAGS {
+  struct {
+    UINT64 CarryFlag : 1;
+    UINT64 ReadAs1 : 1;
+    UINT64 ParityFlag : 1;
+    UINT64 Reserved1 : 1;
+    UINT64 AuxiliaryCarryFlag : 1;
+    UINT64 Reserved2 : 1;
+    UINT64 ZeroFlag : 1;
+    UINT64 SignFlag : 1;
+    UINT64 TrapFlag : 1;
+    UINT64 InterruptEnableFlag : 1;
+    UINT64 DirectionFlag : 1;
+    UINT64 OverflowFlag : 1;
+    UINT64 IoPrivilegeLevel : 2;
+    UINT64 NestedTaskFlag : 1;
+    UINT64 Reserved3 : 1;
+    UINT64 ResumeFlag : 1;
+    UINT64 Virtual8086ModeFlag : 1;
+    UINT64 AlignmentCheckFlag : 1;
+    UINT64 VirtualInterruptFlag : 1;
+    UINT64 VirtualInterruptPendingFlag : 1;
+    UINT64 IdentificationFlag : 1;
+  };
+
+  UINT64 Value;
+} RFLAGS, *PRFLAGS;
 
 /**
  * @brief enum to show type of all HyperDbg events
@@ -479,6 +551,8 @@ typedef enum _DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION {
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_ADD_ACTION_TO_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_QUERY_AND_MODIFY_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_READ_REGISTERS,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_BP,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_LIST_OR_MODIFY_BREAKPOINTS,
 
   //
   // Debuggee to debugger
@@ -496,6 +570,8 @@ typedef enum _DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION {
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_ADDING_ACTION_TO_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_QUERY_AND_MODIFY_EVENT,
   DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_READING_REGISTERS,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_BP,
+  DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_LIST_OR_MODIFY_BREAKPOINTS,
 
 } DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION;
 
@@ -1178,6 +1254,28 @@ typedef struct _DEBUGGEE_CHANGE_PROCESS_PACKET {
 } DEBUGGEE_CHANGE_PROCESS_PACKET, *PDEBUGGEE_CHANGE_PROCESS_PACKET;
 
 /**
+ * @brief stepping types
+ *
+ */
+typedef enum _DEBUGGER_REMOTE_STEPPING_REQUEST {
+
+  DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_OVER,
+  DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN,
+  DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN_GUARANTEED,
+
+} DEBUGGER_REMOTE_STEPPING_REQUEST;
+
+/**
+ * @brief The structure of stepping packet in HyperDbg
+ *
+ */
+typedef struct _DEBUGGEE_STEP_PACKET {
+
+  DEBUGGER_REMOTE_STEPPING_REQUEST StepType;
+
+} DEBUGGEE_STEP_PACKET, *PDEBUGGEE_STEP_PACKET;
+
+/**
  * @brief The structure of .formats result packet in HyperDbg
  *
  */
@@ -1187,6 +1285,88 @@ typedef struct _DEBUGGEE_FORMATS_PACKET {
   UINT32 Result;
 
 } DEBUGGEE_FORMATS_PACKET, *PDEBUGGEE_FORMATS_PACKET;
+
+/**
+ * @brief The constant to apply to all cores for bp command
+ *
+ */
+#define DEBUGGEE_BP_APPLY_TO_ALL_CORES 0xffffffff
+
+/**
+ * @brief The constant to apply to all processes for bp command
+ *
+ */
+#define DEBUGGEE_BP_APPLY_TO_ALL_PROCESSES 0xffffffff
+
+/**
+ * @brief The constant to apply to all threads for bp command
+ *
+ */
+#define DEBUGGEE_BP_APPLY_TO_ALL_THREADS 0xffffffff
+
+/**
+ * @brief The structure of bp command packet in HyperDbg
+ *
+ */
+typedef struct _DEBUGGEE_BP_PACKET {
+
+  UINT64 Address;
+  UINT32 Pid;
+  UINT32 Tid;
+  UINT32 Core;
+  UINT32 Result;
+
+} DEBUGGEE_BP_PACKET, *PDEBUGGEE_BP_PACKET;
+
+/**
+ * @brief The structure of storing breakpoints
+ *
+ */
+typedef struct _DEBUGGEE_BP_DESCRIPTOR {
+
+  UINT64 BreakpointId;
+  LIST_ENTRY BreakpointsList;
+  BOOLEAN Enabled;
+  UINT64 Address;
+  UINT64 PhysAddress;
+  UINT32 Pid;
+  UINT32 Tid;
+  UINT32 Core;
+  BYTE PreviousByte;
+
+} DEBUGGEE_BP_DESCRIPTOR, *PDEBUGGEE_BP_DESCRIPTOR;
+
+/**
+ * @brief Apply event modifications to all breakpoints
+ *
+ */
+#define APPLY_TO_ALL_BREAKPOINTS 0xffffffff
+
+/**
+ * @brief breakpoint modification types
+ *
+ */
+typedef enum _DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST {
+
+  DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST_LIST_BREAKPOINTS,
+  DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST_ENABLE,
+  DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST_DISABLE,
+  DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST_CLEAR,
+
+} DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST;
+
+/**
+ * @brief The structure of breakpoint modification requests packet in HyperDbg
+ *
+ */
+typedef struct _DEBUGGEE_BP_LIST_OR_MODIFY_PACKET {
+
+  UINT64 BreakpointId;
+  DEBUGGEE_BREAKPOINT_MODIFICATION_REQUEST Request;
+  UINT32 CountOfBreakpointForListRequest;
+  UINT32 Result;
+
+} DEBUGGEE_BP_LIST_OR_MODIFY_PACKET, *PDEBUGGEE_BP_LIST_OR_MODIFY_PACKET;
 
 /**
  * @brief The structure of script packet in HyperDbg
@@ -1204,15 +1384,6 @@ typedef struct _DEBUGGEE_SCRIPT_PACKET {
   //
 
 } DEBUGGEE_SCRIPT_PACKET, *PDEBUGGEE_SCRIPT_PACKET;
-
-/**
- * @brief map register name to its enum.
- *
- */
-static const char *const RegistersNames[] = {
-    "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp",    "rsp",
-    "r8",  "r9",  "r10", "r11", "r12", "r13", "r14",    "r15",
-    "ds",  "es",  "fs",  "gs",  "cs",  "ss",  "eflags", "rip"};
 
 /**
  * @brief for reading all regisers in r command.
@@ -1427,6 +1598,36 @@ typedef struct _DEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET {
  *
  */
 #define DEBUGGER_ERROR_INVALID_REGISTER_NUMBER 0xc0000017
+
+/**
+ * @brief error, maximum pools were used without continueing debuggee
+ *
+ */
+#define DEBUGGER_ERROR_MAXIMUM_BREAKPOINT_WITHOUT_CONTINUE 0xc0000018
+
+/**
+ * @brief error, breakpoint already exists on the target address
+ *
+ */
+#define DEBUGGER_ERROR_BREAKPOINT_ALREADY_EXISTS_ON_THE_ADDRESS 0xc0000019
+
+/**
+ * @brief error, breakpoint id not found
+ *
+ */
+#define DEBUGGER_ERROR_BREAKPOINT_ID_NOT_FOUND 0xc000001a
+
+/**
+ * @brief error, breakpoint already disabled
+ *
+ */
+#define DEBUGGER_ERROR_BREAKPOINT_ALREADY_DISABLED 0xc000001b
+
+/**
+ * @brief error, breakpoint already enabled
+ *
+ */
+#define DEBUGGER_ERROR_BREAKPOINT_ALREADY_ENABLED 0xc000001c
 
 //
 // WHEN YOU ADD ANYTHING TO THIS LIST OF ERRORS, THEN

@@ -61,9 +61,6 @@
     <Filter Include="Source Files\VMM\VMX">
       <UniqueIdentifier>{aabeca50-1c14-442c-8268-ece54ed257d5}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\VMM\EPT">
-      <UniqueIdentifier>{ec45d147-144f-487e-ae36-966cbc095b2f}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header Files\VMM">
       <UniqueIdentifier>{7bb3397e-cb3d-4625-8ee3-742475b27948}</UniqueIdentifier>
     </Filter>
@@ -93,6 +90,9 @@
     </Filter>
     <Filter Include="Source Files\Devices">
       <UniqueIdentifier>{92ce4a54-97e0-4ab4-881f-6703049c03d6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\VMM\EPT">
+      <UniqueIdentifier>{ec45d147-144f-487e-ae36-966cbc095b2f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -179,9 +179,6 @@
     <ClCompile Include="EferHook.c">
       <Filter>Source Files\Debugger\Features\Hooks\SyscallHook</Filter>
     </ClCompile>
-    <ClCompile Include="SegmentRegs.c">
-      <Filter>Source Files\VMM\VMX</Filter>
-    </ClCompile>
     <ClCompile Include="Counters.c">
       <Filter>Source Files\VMM\VMX</Filter>
     </ClCompile>
@@ -220,6 +217,12 @@
     </ClCompile>
     <ClCompile Include="GdbStub.c">
       <Filter>Source Files\Debugger\Communication</Filter>
+    </ClCompile>
+    <ClCompile Include="ManageRegs.c">
+      <Filter>Source Files\VMM\VMX</Filter>
+    </ClCompile>
+    <ClCompile Include="BreakpointCommands.c">
+      <Filter>Source Files\Debugger\Commands</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -330,6 +333,12 @@
     </ClInclude>
     <ClInclude Include="Mtf.h">
       <Filter>Header Files\VMM\VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="ManageRegs.h">
+      <Filter>Header Files\VMM\VMX</Filter>
+    </ClInclude>
+    <ClInclude Include="BreakpointCommands.h">
+      <Filter>Header Files\Debugger\Commands</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

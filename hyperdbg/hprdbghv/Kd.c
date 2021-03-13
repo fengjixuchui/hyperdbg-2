@@ -58,6 +58,12 @@ KdInitializeKernelDebugger()
     RtlZeroMemory(&g_IgnoreBreaksToDebugger, sizeof(DEBUGGEE_REQUEST_TO_IGNORE_BREAKS_UNTIL_AN_EVENT));
 
     //
+    // Initialize list of breakpoints and breakpoint id
+    //
+    InitializeListHead(&g_BreakpointsListHead);
+    g_MaximumBreakpointId = 0;
+
+    //
     // Indicate that kernel debugger is active
     //
     g_KernelDebuggerState = TRUE;
@@ -632,113 +638,41 @@ KdSwitchProcess(PDEBUGGEE_CHANGE_PROCESS_PACKET PidRequest)
 BOOLEAN
 KdReadRegisters(PGUEST_REGS Regs, PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegisterRequest)
 {
-    switch (ReadRegisterRequest->RegisterID)
+    GUEST_EXTRA_REGISTERS ERegs = {0};
+
+    if (ReadRegisterRequest->RegisterID == DEBUGGEE_SHOW_ALL_REGISTERS)
     {
-    case DEBUGGEE_SHOW_ALL_REGISTERS:
+        //
+        // Add General porpuse registers
+        //
         memcpy((void *)((CHAR *)ReadRegisterRequest + sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION)),
                Regs,
                sizeof(GUEST_REGS));
-        break;
 
-    case REGISTER_RAX:
-        ReadRegisterRequest->Value = Regs->rax;
-        break;
+        //
+        // Read Extra registers
+        //
+        ERegs.CS     = DebuggerGetRegValueWrapper(NULL, REGISTER_CS);
+        ERegs.SS     = DebuggerGetRegValueWrapper(NULL, REGISTER_SS);
+        ERegs.DS     = DebuggerGetRegValueWrapper(NULL, REGISTER_DS);
+        ERegs.ES     = DebuggerGetRegValueWrapper(NULL, REGISTER_ES);
+        ERegs.FS     = DebuggerGetRegValueWrapper(NULL, REGISTER_FS);
+        ERegs.GS     = DebuggerGetRegValueWrapper(NULL, REGISTER_GS);
+        ERegs.RFLAGS = DebuggerGetRegValueWrapper(NULL, REGISTER_RFLAGS);
+        ERegs.RIP    = DebuggerGetRegValueWrapper(NULL, REGISTER_RIP);
 
-    case REGISTER_RBX:
-        ReadRegisterRequest->Value = Regs->rbx;
-        break;
-
-    case REGISTER_RCX:
-        ReadRegisterRequest->Value = Regs->rcx;
-        break;
-
-    case REGISTER_RDX:
-        ReadRegisterRequest->Value = Regs->rdx;
-        break;
-
-    case REGISTER_RSI:
-        ReadRegisterRequest->Value = Regs->rsi;
-        break;
-
-    case REGISTER_RDI:
-        ReadRegisterRequest->Value = Regs->rdi;
-        break;
-
-    case REGISTER_RBP:
-        ReadRegisterRequest->Value = Regs->rbp;
-        break;
-
-    case REGISTER_RSP:
-        ReadRegisterRequest->Value = Regs->rsp;
-        break;
-
-    case REGISTER_R8:
-        ReadRegisterRequest->Value = Regs->r8;
-        break;
-
-    case REGISTER_R9:
-        ReadRegisterRequest->Value = Regs->r9;
-        break;
-
-    case REGISTER_R10:
-        ReadRegisterRequest->Value = Regs->r10;
-        break;
-
-    case REGISTER_R11:
-        ReadRegisterRequest->Value = Regs->r11;
-
-    case REGISTER_R12:
-        ReadRegisterRequest->Value = Regs->r12;
-        break;
-
-    case REGISTER_R13:
-        ReadRegisterRequest->Value = Regs->r13;
-        break;
-
-    case REGISTER_R14:
-        ReadRegisterRequest->Value = Regs->r14;
-        break;
-
-    case REGISTER_R15:
-        ReadRegisterRequest->Value = Regs->r15;
-        break;
-
-    case REGISTER_DS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_ES:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_FS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_GS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_CS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_SS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_EFLAGS:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    case REGISTER_RIP:
-        ReadRegisterRequest->Value = 0;
-        break;
-
-    default:
-        return FALSE;
-        break;
+        //
+        // copy at the end of ReadRegisterRequest structure
+        //
+        memcpy((void *)((CHAR *)ReadRegisterRequest + sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION) + sizeof(GUEST_REGS)),
+               &ERegs,
+               sizeof(GUEST_EXTRA_REGISTERS));
     }
+    else
+    {
+        ReadRegisterRequest->Value = DebuggerGetRegValueWrapper(Regs, ReadRegisterRequest->RegisterID);
+    }
+
     return TRUE;
 }
 
@@ -813,7 +747,6 @@ KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
 
 /**
  * @brief Notify user-mode to unload the debuggee and close the connections
- * @details  
  * 
  * @return VOID
  */
@@ -1045,12 +978,12 @@ KdHandleNmi(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
 }
 
 /**
- * @brief apply step one instruction to the debuggee
+ * @brief apply a guaranteed step one instruction to the debuggee
  * @param CoreId 
  * @return VOID 
  */
 VOID
-KdStepInstruction(ULONG CoreId)
+KdGuranteedStepInstruction(ULONG CoreId)
 {
     RFLAGS Rflags = {0};
 
@@ -1252,11 +1185,14 @@ VOID
 KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestRegs)
 {
     PDEBUGGEE_CHANGE_CORE_PACKET                        ChangeCorePacket;
+    PDEBUGGEE_STEP_PACKET                               SteppingPacket;
     PDEBUGGER_FLUSH_LOGGING_BUFFERS                     FlushPacket;
     PDEBUGGEE_REGISTER_READ_DESCRIPTION                 ReadRegisterPacket;
     PDEBUGGEE_CHANGE_PROCESS_PACKET                     ChangeProcessPacket;
     PDEBUGGEE_SCRIPT_PACKET                             ScriptPacket;
     PDEBUGGEE_USER_INPUT_PACKET                         UserInputPacket;
+    PDEBUGGEE_BP_PACKET                                 BpPacket;
+    PDEBUGGEE_BP_LIST_OR_MODIFY_PACKET                  BpListOrModifyPacket;
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET EventRegPacket;
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET AddActionPacket;
     PDEBUGGER_MODIFY_EVENTS                             QueryAndModifyEventPacket;
@@ -1329,20 +1265,47 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
 
             case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_MODE_STEP:
 
-                //
-                // Indicate a step
-                //
-                KdStepInstruction(CurrentCore);
+                SteppingPacket = (DEBUGGEE_STEP_PACKET *)(((CHAR *)TheActualPacket) +
+                                                          sizeof(DEBUGGER_REMOTE_PACKET));
 
-                //
-                // Unlock just on core
-                //
-                KdContinueDebuggeeJustCurrentCore(CurrentCore);
+                if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN_GUARANTEED)
+                {
+                    //
+                    // Guaranteed step in
+                    //
 
-                //
-                // No need to wait for new commands
-                //
-                EscapeFromTheLoop = TRUE;
+                    //
+                    // Indicate a step
+                    //
+                    KdGuranteedStepInstruction(CurrentCore);
+
+                    //
+                    // Unlock just on core
+                    //
+                    KdContinueDebuggeeJustCurrentCore(CurrentCore);
+
+                    //
+                    // No need to wait for new commands
+                    //
+                    EscapeFromTheLoop = TRUE;
+                }
+                else if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN)
+                {
+                    //
+                    // Step in
+                    //
+
+                    //
+                    // To be implemented
+                    //
+                    DbgBreakPoint();
+                }
+                else if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_OVER)
+                {
+                    //
+                    // Step over
+                    //
+                }
 
                 break;
 
@@ -1458,7 +1421,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
 
                 if (ReadRegisterPacket->RegisterID == DEBUGGEE_SHOW_ALL_REGISTERS)
                 {
-                    SizeToSend = sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION) + sizeof(GUEST_REGS);
+                    SizeToSend = sizeof(DEBUGGEE_REGISTER_READ_DESCRIPTION) + sizeof(GUEST_REGS) + sizeof(GUEST_EXTRA_REGISTERS);
                 }
                 else
                 {
@@ -1627,6 +1590,46 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
 
                 break;
 
+            case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_BP:
+
+                BpPacket = (DEBUGGEE_BP_PACKET *)(((CHAR *)TheActualPacket) +
+                                                  sizeof(DEBUGGER_REMOTE_PACKET));
+
+                //
+                // Perform the action
+                //
+                BreakpointAddNew(BpPacket);
+
+                //
+                // Send the result of 'bp' back to the debuggee
+                //
+                KdResponsePacketToDebugger(DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGEE_TO_DEBUGGER,
+                                           DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_BP,
+                                           BpPacket,
+                                           sizeof(DEBUGGEE_BP_PACKET));
+
+                break;
+
+            case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_LIST_OR_MODIFY_BREAKPOINTS:
+
+                BpListOrModifyPacket = (DEBUGGEE_BP_LIST_OR_MODIFY_PACKET *)(((CHAR *)TheActualPacket) +
+                                                                             sizeof(DEBUGGER_REMOTE_PACKET));
+
+                //
+                // Perform the action
+                //
+                BreakpointListOrModify(BpListOrModifyPacket);
+
+                //
+                // Send the result of modify or list breakpoints to the debuggee
+                //
+                KdResponsePacketToDebugger(DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGEE_TO_DEBUGGER,
+                                           DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_LIST_OR_MODIFY_BREAKPOINTS,
+                                           BpListOrModifyPacket,
+                                           sizeof(DEBUGGEE_BP_LIST_OR_MODIFY_PACKET));
+
+                break;
+
             default:
                 LogError("err, unknown packet action received from the debugger.\n");
                 break;
@@ -1718,9 +1721,9 @@ StartAgain:
         //
         // Find the current instruction
         //
-        MemoryMapperReadMemorySafe(g_GuestState[CurrentCore].LastVmexitRip,
-                                   &PausePacket.InstructionBytesOnRip,
-                                   ExitInstructionLength);
+        MemoryMapperReadMemorySafeOnTargetProcess(g_GuestState[CurrentCore].LastVmexitRip,
+                                                  &PausePacket.InstructionBytesOnRip,
+                                                  ExitInstructionLength);
 
         //
         // Send the pause packet, along with RIP and an
