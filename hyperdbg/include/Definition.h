@@ -1200,7 +1200,7 @@ typedef struct _DEBUGGER_REMOTE_PACKET {
  */
 typedef struct _DEBUGGER_TRIGGERED_EVENT_DETAILS {
 
-  UINT64 Tag;
+  UINT64 Tag; /* in breakpoints Tag is breakpoint id, not event tag */
   PVOID Context;
 
 } DEBUGGER_TRIGGERED_EVENT_DETAILS, *PDEBUGGER_TRIGGERED_EVENT_DETAILS;
@@ -1333,14 +1333,10 @@ typedef struct _DEBUGGEE_BP_DESCRIPTOR {
   UINT32 Tid;
   UINT32 Core;
   BYTE PreviousByte;
+  BOOLEAN SetRflagsIFBitOnMtf;
+  BOOLEAN AvoidReApplyBreakpoint;
 
 } DEBUGGEE_BP_DESCRIPTOR, *PDEBUGGEE_BP_DESCRIPTOR;
-
-/**
- * @brief Apply event modifications to all breakpoints
- *
- */
-#define APPLY_TO_ALL_BREAKPOINTS 0xffffffff
 
 /**
  * @brief breakpoint modification types

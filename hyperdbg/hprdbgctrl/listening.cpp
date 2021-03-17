@@ -180,8 +180,21 @@ StartAgain:
       // or not
       //
       if (PausePacket->EventTag != NULL) {
-        ShowMessages("event 0x%x triggered\n",
-                     PausePacket->EventTag - DebuggerEventTagStartSeed);
+
+        if (PausePacket->PausingReason ==
+            DEBUGGEE_PAUSING_REASON_DEBUGGEE_SOFTWARE_BREAKPOINT_HIT) {
+          //
+          // It's a breakpoint id
+          //
+          ShowMessages("breakpoint 0x%x hit\n", PausePacket->EventTag);
+
+        } else {
+          //
+          // It's an event tag
+          //
+          ShowMessages("event 0x%x triggered\n",
+                       PausePacket->EventTag - DebuggerEventTagStartSeed);
+        }
       }
 
       if (PausePacket->PausingReason !=
@@ -495,7 +508,7 @@ StartAgain:
               "R11=%016llx R12=%016llx R13=%016llx\n"
               "R14=%016llx R15=%016llx IOPL=%02x\n"
               "%s  %s  %s  %s\n%s  %s  %s  %s  \n"
-              "CS=%04x SS=%04x DS=%04x ES=%04x FS=%04x GS=%04x\n"
+              "CS %04x SS %04x DS %04x ES %04x FS %04x GS %04x\n"
               "RFLAGS=%016llx\n",
               Regs->rax, Regs->rbx, Regs->rcx, Regs->rdx, Regs->rsi, Regs->rdi,
               ExtraRegs->RIP, Regs->rsp, Regs->rbp, Regs->r8, Regs->r9,

@@ -12,6 +12,316 @@
 #include "pch.h"
 
 /**
+ * @brief Check if the breakpoint vm-exit relates to !epthook command or not
+ * 
+ * @param CurrentProcessorIndex  
+ * @param GuestRip  
+ * @param GuestRegs  
+ * 
+ * @return BOOLEAN
+ */
+BOOLEAN
+BreakpointCheckAndHandleEptHookBreakpoints(UINT32 CurrentProcessorIndex, ULONG GuestRip, PGUEST_REGS GuestRegs)
+{
+    PLIST_ENTRY TempList           = 0;
+    BOOLEAN     IsHandledByEptHook = FALSE;
+
+    //
+    // ***** Check breakpoint for !epthook *****
+    //
+
+    //
+    // Check whether the breakpoint was due to a !epthook command or not
+    //
+    TempList = &g_EptState->HookedPagesList;
+
+    while (&g_EptState->HookedPagesList != TempList->Flink)
+    {
+        TempList                            = TempList->Flink;
+        PEPT_HOOKED_PAGE_DETAIL HookedEntry = CONTAINING_RECORD(TempList, EPT_HOOKED_PAGE_DETAIL, PageHookList);
+
+        if (HookedEntry->IsExecutionHook)
+        {
+            for (size_t i = 0; i < HookedEntry->CountOfBreakpoints; i++)
+            {
+                if (HookedEntry->BreakpointAddresses[i] == GuestRip)
+                {
+                    //
+                    // We found an address that matches the details, let's trigger the event
+                    //
+
+                    //
+                    // As the context to event trigger, we send the rip
+                    // of where triggered this event
+                    //
+                    DebuggerTriggerEvents(HIDDEN_HOOK_EXEC_CC, GuestRegs, GuestRip);
+
+                    //
+                    // Restore to its orginal entry for one instruction
+                    //
+                    EptSetPML1AndInvalidateTLB(HookedEntry->EntryAddress, HookedEntry->OriginalEntry, INVEPT_SINGLE_CONTEXT);
+
+                    //
+                    // Next we have to save the current hooked entry to restore on the next instruction's vm-exit
+                    //
+                    g_GuestState[KeGetCurrentProcessorNumber()].MtfEptHookRestorePoint = HookedEntry;
+
+                    //
+                    // We have to set Monitor trap flag and give it the HookedEntry to work with
+                    //
+                    HvSetMonitorTrapFlag(TRUE);
+
+                    //
+                    // Indicate that we handled the ept violation
+                    //
+                    IsHandledByEptHook = TRUE;
+
+                    //
+                    // Get out of the loop
+                    //
+                    break;
+                }
+            }
+        }
+    }
+
+    //
+    // Don't increment rip
+    //
+    g_GuestState[CurrentProcessorIndex].IncrementRip = FALSE;
+
+    return IsHandledByEptHook;
+}
+
+/**
+ * @brief Check if the breakpoint vm-exit relates to 'bp' command or not
+ * 
+ * @param CurrentProcessorIndex  
+ * @param GuestRip  
+ * @param GuestRegs  
+ * 
+ * @return BOOLEAN
+ */
+BOOLEAN
+BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  CurrentProcessorIndex,
+                                                   UINT64                  GuestRip,
+                                                   DEBUGGEE_PAUSING_REASON Reason,
+                                                   PGUEST_REGS             GuestRegs)
+{
+    CR3_TYPE                         GuestCr3;
+    BOOLEAN                          IsHandledByBpRoutines = FALSE;
+    PLIST_ENTRY                      TempList              = 0;
+    UINT64                           GuestRipPhysical      = NULL;
+    DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag         = {0};
+    RFLAGS                           Rflags                = {0};
+    ULONG                            LengthOfExitInstr     = 0;
+    BYTE                             InstrByte             = NULL;
+
+    //
+    // ***** Check breakpoint for 'bp' command *****
+    //
+
+    //
+    // Find the current process cr3
+    //
+    NT_KPROCESS * CurrentProcess = (NT_KPROCESS *)(PsGetCurrentProcess());
+    GuestCr3.Flags               = CurrentProcess->DirectoryTableBase;
+
+    //
+    // Convert breakpoint to physical address
+    //
+    GuestRipPhysical = VirtualAddressToPhysicalAddressByProcessCr3(GuestRip, GuestCr3);
+
+    //
+    // Iterate through the list of breakpoints
+    //
+    TempList = &g_BreakpointsListHead;
+
+    while (&g_BreakpointsListHead != TempList->Flink)
+    {
+        TempList                                      = TempList->Flink;
+        PDEBUGGEE_BP_DESCRIPTOR CurrentBreakpointDesc = CONTAINING_RECORD(TempList, DEBUGGEE_BP_DESCRIPTOR, BreakpointsList);
+
+        if (CurrentBreakpointDesc->PhysAddress == GuestRipPhysical)
+        {
+            //
+            // It's a breakpoint by 'bp' command
+            //
+            IsHandledByBpRoutines = TRUE;
+
+            //
+            // First, we remove the breakpoint
+            //
+            MemoryMapperWriteMemorySafeByPhysicalAddress(GuestRipPhysical,
+                                                         &CurrentBreakpointDesc->PreviousByte,
+                                                         sizeof(BYTE));
+
+            //
+            // Now, halt the debuggee
+            //
+            ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
+
+            //
+            // In breakpoints tag is breakpoint id, not event tag
+            //
+            if (Reason == DEBUGGEE_PAUSING_REASON_DEBUGGEE_SOFTWARE_BREAKPOINT_HIT)
+            {
+                ContextAndTag.Tag = CurrentBreakpointDesc->BreakpointId;
+            }
+
+            //
+            // Check constraints
+            //
+            if ((CurrentBreakpointDesc->Pid == DEBUGGEE_BP_APPLY_TO_ALL_PROCESSES || CurrentBreakpointDesc->Pid == PsGetCurrentProcessId()) &&
+                (CurrentBreakpointDesc->Tid == DEBUGGEE_BP_APPLY_TO_ALL_THREADS || CurrentBreakpointDesc->Tid == PsGetCurrentThreadId()) &&
+                (CurrentBreakpointDesc->Core == DEBUGGEE_BP_APPLY_TO_ALL_CORES || CurrentBreakpointDesc->Core == CurrentProcessorIndex))
+            {
+                //
+                // *** It's not safe to access CurrentBreakpointDesc anymore as the
+                // breakpoint might be removed ***
+                //
+
+                KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
+                                                      GuestRegs,
+                                                      Reason,
+                                                      &ContextAndTag);
+            }
+
+            //
+            // Check if we should re-apply the breakpoint after this instruction
+            // or not (in other words, is breakpoint still valid)
+            //
+            if (!CurrentBreakpointDesc->AvoidReApplyBreakpoint)
+            {
+                //
+                // We should re-apply the breakpoint on next mtf
+                //
+                g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState = CurrentBreakpointDesc;
+
+                //
+                // Fire and MTF
+                //
+                HvSetMonitorTrapFlag(TRUE);
+
+                //
+                // As we want to continue debuggee, the MTF might arrive when the
+                // host finish executing it's time slice; thus, a clock interrupt
+                // or an IPI might be arrived and the next instruction is not what
+                // we expect, becuase of that we check if the IF (Interrupt enable)
+                // flag of RFLAGS is enabled or not, if enabled then we remove it
+                // to avoid any clock-interrupt or IPI to arrive and the next
+                // instruction is our next instruction in the current execution
+                // context
+                //
+                __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+                if (Rflags.InterruptEnableFlag)
+                {
+                    Rflags.InterruptEnableFlag = FALSE;
+                    __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+                    //
+                    // An indicator to restore RFLAGS if to enabled state
+                    //
+                    g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState->SetRflagsIFBitOnMtf = TRUE;
+                }
+            }
+
+            //
+            // Do not increment rip
+            //
+            g_GuestState[CurrentProcessorIndex].IncrementRip = FALSE;
+
+            //
+            // No need to iterate anymore
+            //
+            break;
+        }
+    }
+
+    return IsHandledByBpRoutines;
+}
+
+/**
+ * @brief Handle breakpoint vm-exits (#BP) 
+ * 
+ * @param CurrentProcessorIndex  
+ * @param GuestRegs  
+ * 
+ * @return VOID
+ */
+VOID
+BreakpointHandleBpTraps(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
+{
+    ULONG64                          GuestRip           = NULL;
+    BOOLEAN                          IsHandledByEptHook = FALSE;
+    DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag      = {0};
+
+    //
+    // Reading guest's RIP
+    //
+    __vmx_vmread(GUEST_RIP, &GuestRip);
+
+    //
+    // Check if it relates to !epthook or not
+    //
+    IsHandledByEptHook = BreakpointCheckAndHandleEptHookBreakpoints(CurrentProcessorIndex, GuestRip, GuestRegs);
+
+    //
+    // re-inject #BP back to the guest if not handled by the hidden breakpoint
+    //
+    if (!IsHandledByEptHook)
+    {
+        if (g_KernelDebuggerState)
+        {
+            //
+            // Kernel debugger is attached, let's halt everything
+            //
+
+            //
+            // A breakpoint triggered and two things might be happened,
+            // first, a breakpoint is triggered randomly in the computer and
+            // we shouldn't do anything on it (won't change the instruction)
+            // second, the breakpoint is because of 'bp' command, we should
+            // replace it with exact byte
+            //
+
+            if (!BreakpointCheckAndHandleDebuggerDefinedBreakpoints(CurrentProcessorIndex,
+                                                                    GuestRip,
+                                                                    DEBUGGEE_PAUSING_REASON_DEBUGGEE_SOFTWARE_BREAKPOINT_HIT,
+                                                                    GuestRegs))
+            {
+                //
+                // It's a random breakpoint byte
+                //
+                ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
+                KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
+                                                      GuestRegs,
+                                                      DEBUGGEE_PAUSING_REASON_DEBUGGEE_SOFTWARE_BREAKPOINT_HIT,
+                                                      &ContextAndTag);
+
+                //
+                // Increment rip
+                //
+                g_GuestState[CurrentProcessorIndex].IncrementRip = TRUE;
+            }
+        }
+        else
+        {
+            //
+            // Don't increment rip
+            //
+            g_GuestState[CurrentProcessorIndex].IncrementRip = FALSE;
+
+            //
+            // Kernel debugger (debugger-mode) is not attached, re-inject the breakpoint
+            //
+            EventInjectBreakpoint();
+        }
+    }
+}
+
+/**
  * @brief writes the 0xcc and applies the breakpoint 
  * @detail this function won't remove the descriptor from the list
  * 
@@ -34,22 +344,23 @@ BreakpointWrite(PDEBUGGEE_BP_DESCRIPTOR BreakpointDescriptor)
     }
 
     //
-    // Read previous byte and save it to the descriptor
+    // Read and save previous byte and save it to the descriptor
     //
     MemoryMapperReadMemorySafeOnTargetProcess(BreakpointDescriptor->Address, &PreviousByte, sizeof(BYTE));
+    BreakpointDescriptor->PreviousByte = PreviousByte;
 
     //
     // Set breakpoint to enabled
     //
-    BreakpointDescriptor->Enabled = TRUE;
+    BreakpointDescriptor->Enabled                = TRUE;
+    BreakpointDescriptor->AvoidReApplyBreakpoint = FALSE;
 
     //
     // Apply the breakpoint
     //
     MemoryMapperWriteMemorySafeByPhysicalAddress(BreakpointDescriptor->PhysAddress,
                                                  &BreakpointByte,
-                                                 sizeof(BYTE),
-                                                 PsGetCurrentProcessId());
+                                                 sizeof(BYTE));
 
     return TRUE;
 }
@@ -64,12 +375,22 @@ BreakpointWrite(PDEBUGGEE_BP_DESCRIPTOR BreakpointDescriptor)
 BOOLEAN
 BreakpointClear(PDEBUGGEE_BP_DESCRIPTOR BreakpointDescriptor)
 {
+    BYTE TargetMem = NULL;
+
     //
     // Check if address is safe (only one byte for 0xcc)
     //
     if (!CheckMemoryAccessSafety(BreakpointDescriptor->Address, sizeof(BYTE)))
     {
-        return FALSE;
+        //
+        // Double check if we can access it by physical address
+        //
+        MemoryMapperReadMemorySafeByPhysicalAddress(BreakpointDescriptor->PhysAddress, &TargetMem, sizeof(BYTE));
+
+        if (TargetMem != 0xcc)
+        {
+            return FALSE;
+        }
     }
 
     //
@@ -77,15 +398,52 @@ BreakpointClear(PDEBUGGEE_BP_DESCRIPTOR BreakpointDescriptor)
     //
     MemoryMapperWriteMemorySafeByPhysicalAddress(BreakpointDescriptor->PhysAddress,
                                                  &BreakpointDescriptor->PreviousByte,
-                                                 sizeof(BYTE),
-                                                 PsGetCurrentProcessId());
+                                                 sizeof(BYTE));
 
     //
     // Set breakpoint to disabled
     //
-    BreakpointDescriptor->Enabled = FALSE;
+    BreakpointDescriptor->Enabled                = FALSE;
+    BreakpointDescriptor->AvoidReApplyBreakpoint = TRUE;
 
     return TRUE;
+}
+
+/**
+ * @brief Remove all the breakpoints if possible
+ * 
+ * @return VOID
+ */
+VOID
+BreakpointRemoveAllBreakpoints()
+{
+    PLIST_ENTRY TempList = 0;
+
+    //
+    // Iterate through the list of breakpoints
+    //
+    TempList = &g_BreakpointsListHead;
+
+    while (&g_BreakpointsListHead != TempList->Flink)
+    {
+        TempList                                      = TempList->Flink;
+        PDEBUGGEE_BP_DESCRIPTOR CurrentBreakpointDesc = CONTAINING_RECORD(TempList, DEBUGGEE_BP_DESCRIPTOR, BreakpointsList);
+
+        //
+        // Clear the breakpoint
+        //
+        BreakpointClear(CurrentBreakpointDesc);
+
+        //
+        // Remove breakpoint from the list of breakpoints
+        //
+        RemoveEntryList(&CurrentBreakpointDesc->BreakpointsList);
+
+        //
+        // Uninitialize the breakpoint descriptor (safely)
+        //
+        PoolManagerFreePool(CurrentBreakpointDesc);
+    }
 }
 
 /**
@@ -260,7 +618,7 @@ BreakpointAddNew(PDEBUGGEE_BP_PACKET BpDescriptorArg)
     //
     // Apply the breakpoint
     //
-    BreakpointWrite(BreakpointDescriptor->Address, BreakpointDescriptor);
+    BreakpointWrite(BreakpointDescriptor);
 
     //
     // Show that operation was successful
@@ -290,13 +648,13 @@ BreakpointListAllBreakpoint()
 
         if (IsListEmpty)
         {
-            Log("id   address\n");
-            Log("--   ---------------");
+            Log("id   address           status\n");
+            Log("--   ---------------   --------");
 
             IsListEmpty = FALSE;
         }
 
-        Log("\n%02x   %016llx ", CurrentBreakpointDesc->BreakpointId, CurrentBreakpointDesc->Address);
+        Log("\n%02x   %016llx  %s", CurrentBreakpointDesc->BreakpointId, CurrentBreakpointDesc->Address, CurrentBreakpointDesc->Enabled ? "enabled" : "disabled");
 
         if (CurrentBreakpointDesc->Core != DEBUGGEE_BP_APPLY_TO_ALL_CORES)
         {

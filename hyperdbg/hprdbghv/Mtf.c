@@ -21,7 +21,13 @@
 VOID
 MtfHandleVmexit(ULONG CurrentProcessorIndex, PGUEST_REGS GuestRegs)
 {
-    DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag = {0};
+    BOOLEAN                          IsMtfForReApplySoftwareBreakpoint = FALSE;
+    DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag                     = {0};
+
+    //
+    // Redo the instruction
+    //
+    g_GuestState[CurrentProcessorIndex].IncrementRip = FALSE;
 
     //
     // Explicitly say that we want to unset MTFs
@@ -29,8 +35,45 @@ MtfHandleVmexit(ULONG CurrentProcessorIndex, PGUEST_REGS GuestRegs)
     g_GuestState[CurrentProcessorIndex].IgnoreMtfUnset = FALSE;
 
     //
-    // Monitor Trap Flag
+    // Check if we need to re-apply a breakpoint or not
+    // We check it separately because the guest might step
+    // instructions on an MTF so we want to check for the step too
     //
+    if (g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState != NULL)
+    {
+        BYTE BreakpointByte               = 0xcc;
+        IsMtfForReApplySoftwareBreakpoint = TRUE;
+
+        //
+        // Restore previous breakpoint byte
+        //
+
+        MemoryMapperWriteMemorySafeByPhysicalAddress(
+            g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState->PhysAddress,
+            &BreakpointByte,
+            sizeof(BYTE));
+
+        //
+        // Check if we should re-enabled IF bit of RFLAGS or not
+        //
+        if (g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState->SetRflagsIFBitOnMtf)
+        {
+            RFLAGS Rflags = {0};
+
+            __vmx_vmread(GUEST_RFLAGS, &Rflags);
+            Rflags.InterruptEnableFlag = TRUE;
+            __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+            g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState->SetRflagsIFBitOnMtf = FALSE;
+        }
+
+        g_GuestState[CurrentProcessorIndex].DebuggingState.SoftwareBreakpointState = NULL;
+    }
+
+    //
+    // *** Regular Monitor Trap Flag functionalities ***
+    //
+
     if (g_GuestState[CurrentProcessorIndex].MtfEptHookRestorePoint)
     {
         //
@@ -51,29 +94,36 @@ MtfHandleVmexit(ULONG CurrentProcessorIndex, PGUEST_REGS GuestRegs)
         g_GuestState[CurrentProcessorIndex].DebuggingState.WaitForStepOnMtf = FALSE;
 
         //
-        // Handle the breakpoint
+        // Check and handle if there is a software defined breakpoint
         //
-        ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
-        KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
-                                              GuestRegs,
-                                              DEBUGGEE_PAUSING_REASON_DEBUGGEE_STEPPED,
-                                              &ContextAndTag);
+        if (!BreakpointCheckAndHandleDebuggerDefinedBreakpoints(CurrentProcessorIndex,
+                                                                g_GuestState[CurrentProcessorIndex].LastVmexitRip,
+                                                                DEBUGGEE_PAUSING_REASON_DEBUGGEE_STEPPED,
+                                                                GuestRegs))
+        {
+            //
+            // Handle the step
+            //
+            ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
+            KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
+                                                  GuestRegs,
+                                                  DEBUGGEE_PAUSING_REASON_DEBUGGEE_STEPPED,
+                                                  &ContextAndTag);
+        }
     }
     else if (g_GuestState[CurrentProcessorIndex].MtfTest)
     {
         SteppingsHandleThreadChanges(GuestRegs, CurrentProcessorIndex);
         g_GuestState[CurrentProcessorIndex].MtfTest = FALSE;
     }
-    else
+    else if (!IsMtfForReApplySoftwareBreakpoint)
     {
         LogError("Why MTF occured ?!");
     }
 
     //
-    // Redo the instruction
+    // Final check to unset mtf
     //
-    g_GuestState[CurrentProcessorIndex].IncrementRip = FALSE;
-
     if (!g_GuestState[CurrentProcessorIndex].IgnoreMtfUnset)
     {
         //

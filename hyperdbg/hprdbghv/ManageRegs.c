@@ -13,11 +13,24 @@
 #include "pch.h"
 
 /**
- * @brief Set the Guest Cs selector
+ * @brief Set just the Guest Cs selector
  * 
  * @param Cs The CS Selector for the guest
  * @return VOID 
  */
+VOID
+SetGuestCsSel(PSEGMENT_SELECTOR Cs)
+{
+    __vmx_vmwrite(GUEST_CS_SELECTOR, Cs->SEL);
+}
+
+/**
+ * @brief Set the Guest Cs  
+ * 
+ * @param Cs The CS Selector for the guest
+ * @return VOID 
+ */
+
 VOID
 SetGuestCs(PSEGMENT_SELECTOR Cs)
 {
@@ -43,6 +56,18 @@ GetGuestCs()
     __vmx_vmread(GUEST_CS_SELECTOR, &Cs.SEL);
 
     return Cs;
+}
+
+/**
+ * @brief Set just the Guest Ss selector
+ * 
+ * @param Ss The SS Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestSsSel(PSEGMENT_SELECTOR Ss)
+{
+    __vmx_vmwrite(GUEST_SS_SELECTOR, Ss->SEL);
 }
 
 /**
@@ -79,6 +104,18 @@ GetGuestSs()
 }
 
 /**
+ * @brief Set just the Guest Ds selector
+ * 
+ * @param Ds The DS Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestDsSel(PSEGMENT_SELECTOR Ds)
+{
+    __vmx_vmwrite(GUEST_DS_SELECTOR, Ds->SEL);
+}
+
+/**
  * @brief Set the Guest Ds selector
  * 
  * @param Ds The DS Selector for the guest
@@ -109,6 +146,18 @@ GetGuestDs()
     __vmx_vmread(GUEST_DS_SELECTOR, &Ds.SEL);
 
     return Ds;
+}
+
+/**
+ * @brief Set just the Guest Fs selector
+ * 
+ * @param Fs The FS Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestFsSel(PSEGMENT_SELECTOR Fs)
+{
+    __vmx_vmwrite(GUEST_FS_SELECTOR, Fs->SEL);
 }
 
 /**
@@ -145,6 +194,18 @@ GetGuestFs()
 }
 
 /**
+ * @brief Set just the Guest Gs selector
+ * 
+ * @param Gs The GS Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestGsSel(PSEGMENT_SELECTOR Gs)
+{
+    __vmx_vmwrite(GUEST_GS_SELECTOR, Gs->SEL);
+}
+
+/**
  * @brief Set the Guest Gs selector
  * 
  * @param Gs The GS Selector for the guest
@@ -178,6 +239,18 @@ GetGuestGs()
 }
 
 /**
+ * @brief Set just the Guest Es selector
+ * 
+ * @param Es The ES Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestEsSel(PSEGMENT_SELECTOR Es)
+{
+    __vmx_vmwrite(GUEST_ES_SELECTOR, Es->SEL);
+}
+
+/**
  * @brief Set the Guest Es selector
  * 
  * @param Es The ES Selector for the guest
@@ -208,6 +281,60 @@ GetGuestEs()
     __vmx_vmread(GUEST_ES_SELECTOR, &Es.SEL);
 
     return Es;
+}
+
+/**
+ * @brief Set the Guest Idtr
+ * 
+ * @param Idtr The Idtr Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestIdtr(UINT64 Idtr)
+{
+    __vmx_vmwrite(GUEST_IDTR_BASE, Idtr);
+}
+
+/**
+ * @brief Get the Guest Idtr
+ * 
+ * @return UINT64 
+ */
+UINT64
+GetGuestIdtr()
+{
+    UINT64 Idtr;
+
+    __vmx_vmread(GUEST_IDTR_BASE, &Idtr);
+
+    return Idtr;
+}
+
+/**
+ * @brief Set the Guest Gdtr
+ * 
+ * @param Gdtr The Gdtr Selector for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestGdtr(UINT64 Gdtr)
+{
+    __vmx_vmwrite(GUEST_GDTR_BASE, Gdtr);
+}
+
+/**
+ * @brief Get the Guest Gdtr
+ * 
+ * @return UINT64 
+ */
+UINT64
+GetGuestGdtr()
+{
+    UINT64 Gdtr;
+
+    __vmx_vmread(GUEST_GDTR_BASE, &Gdtr);
+
+    return Gdtr;
 }
 
 /**
@@ -246,6 +373,19 @@ SetGuestRIP(UINT64 RIP)
 {
     __vmx_vmwrite(GUEST_RIP, RIP);
 }
+
+/**
+ * @brief Set the Guest RSP Register
+ * 
+ * @param RSP The RSP Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestRSP(UINT64 RSP)
+{
+    __vmx_vmwrite(GUEST_RSP, RSP);
+}
+
 /**
  * @brief Get the Guest RIP value
  * 
@@ -258,4 +398,134 @@ GetGuestRIP()
 
     __vmx_vmread(GUEST_RIP, &RIP);
     return RIP;
+}
+
+/**
+ * @brief Get the Guest Cr0 value
+ * 
+ * @return UINT64
+ */
+UINT64
+GetGuestCr0()
+{
+    UINT64 Cr0;
+
+    __vmx_vmread(GUEST_CR0, &Cr0);
+    return Cr0;
+}
+
+/**
+ * @brief Get the Guest Cr2 value
+ * 
+ * @return UINT64
+ */
+UINT64
+GetGuestCr2()
+{
+    UINT64 Cr2;
+
+    Cr2 = __readcr2();
+    return Cr2;
+}
+
+/**
+ * @brief Get the Guest Cr3 value
+ * 
+ * @return UINT64
+ */
+UINT64
+GetGuestCr3()
+{
+    UINT64 Cr3;
+
+    __vmx_vmread(GUEST_CR3, &Cr3);
+    return Cr3;
+}
+
+/**
+ * @brief Get the Guest Cr4 value
+ * 
+ * @return UINT64
+ */
+UINT64
+GetGuestCr4()
+{
+    UINT64 Cr4;
+
+    __vmx_vmread(GUEST_CR4, &Cr4);
+    return Cr4;
+}
+
+/**
+ * @brief Get the Guest Cr8 value
+ * 
+ * @return UINT64
+ */
+UINT64
+GetGuestCr8()
+{
+    UINT64 Cr8;
+
+    Cr8 = __readcr8();
+    return Cr8;
+}
+
+/**
+ * @brief Set the Guest Cr0 Register
+ * 
+ * @param Cr0 The Cr0 Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestCr0(UINT64 Cr0)
+{
+    __vmx_vmwrite(GUEST_CR0, Cr0);
+}
+
+/**
+ * @brief Set the Guest Cr2 Register
+ * 
+ * @param Cr2 The Cr2 Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestCr2(UINT64 Cr2)
+{
+    __writecr2(Cr2);
+}
+
+/**
+ * @brief Set the Guest Cr3 Register
+ * 
+ * @param Cr3 The Cr3 Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestCr3(UINT64 Cr3)
+{
+    __vmx_vmwrite(GUEST_CR3, Cr3);
+}
+
+/**
+ * @brief Set the Guest Cr4 Register
+ * 
+ * @param Cr4 The Cr4 Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestCr4(UINT64 Cr4)
+{
+    __vmx_vmwrite(GUEST_CR4, Cr4);
+}
+
+/**
+ * @brief Set the Guest Cr8 Register
+ * 
+ * @param Cr8 The Cr8 Value for the guest
+ * @return VOID 
+ */
+VOID
+SetGuestCr8(UINT64 Cr8)
+{
+    __writecr8(Cr8);
 }
