@@ -48,11 +48,12 @@ BOOLEAN ListeningSerialPortInDebugger() {
   PDEBUGGEE_CHANGE_PROCESS_PACKET ChangeProcessPacket;
   PDEBUGGER_FLUSH_LOGGING_BUFFERS FlushPacket;
   PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegisterPacket;
+  PDEBUGGER_READ_MEMORY ReadMemoryPacket;
   PDEBUGGEE_BP_PACKET BpPacket;
   PDEBUGGEE_BP_LIST_OR_MODIFY_PACKET ListOrModifyBreakpointPacket;
   PGUEST_REGS Regs;
   PGUEST_EXTRA_REGISTERS ExtraRegs;
-
+  unsigned char *MemoryBuffer;
 StartAgain:
 
   CHAR BufferToReceive[MaxSerialPacketSize] = {0};
@@ -200,7 +201,8 @@ StartAgain:
       if (PausePacket->PausingReason !=
           DEBUGGEE_PAUSING_REASON_PAUSE_WITHOUT_DISASM) {
         HyperDbgDisassembler64(PausePacket->InstructionBytesOnRip,
-                               PausePacket->Rip, MAXIMUM_INSTR_SIZE, 1);
+                               PausePacket->Rip, MAXIMUM_INSTR_SIZE, 1, TRUE,
+                               &PausePacket->Rflags);
       }
 
       switch (PausePacket->PausingReason) {
@@ -542,6 +544,60 @@ StartAgain:
                    [DEBUGGER_SYNCRONIZATION_OBJECT_READ_REGISTERS]);
 
       break;
+    case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_READING_MEMORY:
+
+      ReadMemoryPacket =
+          (DEBUGGER_READ_MEMORY *)(((CHAR *)TheActualPacket) +
+                                   sizeof(DEBUGGER_REMOTE_PACKET));
+
+      if (ReadMemoryPacket->KernelStatus ==
+          DEBUGEER_OPERATION_WAS_SUCCESSFULL) {
+        //
+        // Show the result of reading memory like mem=0000000000018b01
+        //
+        MemoryBuffer = (unsigned char *)(((CHAR *)TheActualPacket) +
+                                         sizeof(DEBUGGER_REMOTE_PACKET) +
+                                         sizeof(DEBUGGER_READ_MEMORY));
+
+        if (ReadMemoryPacket->Style == DEBUGGER_SHOW_COMMAND_DISASSEMBLE64) {
+          HyperDbgDisassembler64(MemoryBuffer, ReadMemoryPacket->Address,
+                                 ReadMemoryPacket->ReturnLength, 0, FALSE,
+                                 NULL);
+
+        } else if (ReadMemoryPacket->Style ==
+                   DEBUGGER_SHOW_COMMAND_DISASSEMBLE32) {
+          HyperDbgDisassembler32(MemoryBuffer, ReadMemoryPacket->Address,
+                                 ReadMemoryPacket->ReturnLength, 0, FALSE,
+                                 NULL);
+        } else if (ReadMemoryPacket->Style == DEBUGGER_SHOW_COMMAND_DB) {
+          ShowMemoryCommandDB(
+              MemoryBuffer, ReadMemoryPacket->Size, ReadMemoryPacket->Address,
+              ReadMemoryPacket->MemoryType, ReadMemoryPacket->ReturnLength);
+        } else if (ReadMemoryPacket->Style == DEBUGGER_SHOW_COMMAND_DC) {
+          ShowMemoryCommandDC(
+              MemoryBuffer, ReadMemoryPacket->Size, ReadMemoryPacket->Address,
+              ReadMemoryPacket->MemoryType, ReadMemoryPacket->ReturnLength);
+        } else if (ReadMemoryPacket->Style == DEBUGGER_SHOW_COMMAND_DD) {
+          ShowMemoryCommandDD(
+              MemoryBuffer, ReadMemoryPacket->Size, ReadMemoryPacket->Address,
+              ReadMemoryPacket->MemoryType, ReadMemoryPacket->ReturnLength);
+
+        } else if (ReadMemoryPacket->Style == DEBUGGER_SHOW_COMMAND_DQ) {
+          ShowMemoryCommandDQ(
+              MemoryBuffer, ReadMemoryPacket->Size, ReadMemoryPacket->Address,
+              ReadMemoryPacket->MemoryType, ReadMemoryPacket->ReturnLength);
+        }
+      } else {
+        ShowErrorMessage(ReadMemoryPacket->KernelStatus);
+      }
+
+      //
+      // Signal the event relating to receiving result of reading registers
+      //
+      SetEvent(g_SyncronizationObjectsHandleTable
+                   [DEBUGGER_SYNCRONIZATION_OBJECT_READ_MEMORY]);
+
+      break;
 
     case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_BP:
 
@@ -596,7 +652,6 @@ StartAgain:
       ShowMessages("err, unknown packet action received from the debugger\n");
       break;
     }
-
   } else {
 
     //

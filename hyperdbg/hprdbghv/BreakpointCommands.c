@@ -99,6 +99,7 @@ BreakpointCheckAndHandleEptHookBreakpoints(UINT32 CurrentProcessorIndex, ULONG G
  * @param CurrentProcessorIndex  
  * @param GuestRip  
  * @param GuestRegs  
+ * @param AvoidUnsetMtf  
  * 
  * @return BOOLEAN
  */
@@ -106,7 +107,8 @@ BOOLEAN
 BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  CurrentProcessorIndex,
                                                    UINT64                  GuestRip,
                                                    DEBUGGEE_PAUSING_REASON Reason,
-                                                   PGUEST_REGS             GuestRegs)
+                                                   PGUEST_REGS             GuestRegs,
+                                                   PBOOLEAN                AvoidUnsetMtf)
 {
     CR3_TYPE                         GuestCr3;
     BOOLEAN                          IsHandledByBpRoutines = FALSE;
@@ -116,6 +118,7 @@ BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  Curre
     RFLAGS                           Rflags                = {0};
     ULONG                            LengthOfExitInstr     = 0;
     BYTE                             InstrByte             = NULL;
+    *AvoidUnsetMtf                                         = FALSE;
 
     //
     // ***** Check breakpoint for 'bp' command *****
@@ -170,6 +173,11 @@ BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  Curre
             }
 
             //
+            // Hint debuggee about the length
+            //
+            g_GuestState[CurrentProcessorIndex].DebuggingState.InstructionLengthHint = CurrentBreakpointDesc->InstructionLength;
+
+            //
             // Check constraints
             //
             if ((CurrentBreakpointDesc->Pid == DEBUGGEE_BP_APPLY_TO_ALL_PROCESSES || CurrentBreakpointDesc->Pid == PsGetCurrentProcessId()) &&
@@ -188,6 +196,11 @@ BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  Curre
             }
 
             //
+            // Reset hint to instruction length
+            //
+            g_GuestState[CurrentProcessorIndex].DebuggingState.InstructionLengthHint = 0;
+
+            //
             // Check if we should re-apply the breakpoint after this instruction
             // or not (in other words, is breakpoint still valid)
             //
@@ -202,6 +215,7 @@ BreakpointCheckAndHandleDebuggerDefinedBreakpoints(UINT32                  Curre
                 // Fire and MTF
                 //
                 HvSetMonitorTrapFlag(TRUE);
+                *AvoidUnsetMtf = TRUE;
 
                 //
                 // As we want to continue debuggee, the MTF might arrive when the
@@ -256,6 +270,7 @@ BreakpointHandleBpTraps(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
     ULONG64                          GuestRip           = NULL;
     BOOLEAN                          IsHandledByEptHook = FALSE;
     DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag      = {0};
+    BOOLEAN                          AvoidUnsetMtf; // not used here
 
     //
     // Reading guest's RIP
@@ -289,7 +304,8 @@ BreakpointHandleBpTraps(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
             if (!BreakpointCheckAndHandleDebuggerDefinedBreakpoints(CurrentProcessorIndex,
                                                                     GuestRip,
                                                                     DEBUGGEE_PAUSING_REASON_DEBUGGEE_SOFTWARE_BREAKPOINT_HIT,
-                                                                    GuestRegs))
+                                                                    GuestRegs,
+                                                                    &AvoidUnsetMtf))
             {
                 //
                 // It's a random breakpoint byte
@@ -604,6 +620,11 @@ BreakpointAddNew(PDEBUGGEE_BP_PACKET BpDescriptorArg)
     BreakpointDescriptor->Core         = BpDescriptorArg->Core;
     BreakpointDescriptor->Pid          = BpDescriptorArg->Pid;
     BreakpointDescriptor->Tid          = BpDescriptorArg->Tid;
+
+    //
+    // Use length disassembler engine to get the instruction length
+    //
+    BreakpointDescriptor->InstructionLength = ldisasm(BpDescriptorArg->Address, TRUE);
 
     //
     // Breakpoints are enabled by default
