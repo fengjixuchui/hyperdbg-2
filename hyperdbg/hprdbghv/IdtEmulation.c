@@ -24,6 +24,8 @@ IdtEmulationHandleExceptionAndNmi(VMEXIT_INTERRUPT_INFO InterruptExit, UINT32 Cu
 {
     ULONG                            ErrorCode     = 0;
     DEBUGGER_TRIGGERED_EVENT_DETAILS ContextAndTag = {0};
+    RFLAGS                           Rflags        = {0};
+    BOOLEAN                          AvoidUnsetMtf;
 
     //
     // Exception or non-maskable interrupt (NMI). Either:
@@ -110,10 +112,61 @@ IdtEmulationHandleExceptionAndNmi(VMEXIT_INTERRUPT_INFO InterruptExit, UINT32 Cu
         // It's a breakpoint and should be handled by the kernel debugger
         //
         ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
-        KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
-                                              GuestRegs,
-                                              DEBUGGEE_PAUSING_REASON_DEBUGGEE_HARDWARE_DEBUG_REGISTER_HIT,
-                                              &ContextAndTag);
+
+        if (g_WaitForStepTrap)
+        {
+            //
+            // *** Handle a regular step
+            //
+
+            //
+            // Unset to show that we're no longer looking for a trap
+            //
+            g_WaitForStepTrap = FALSE;
+
+            //
+            // Check if we should disable RFLAGS.TF in this core or not
+            //
+            if (g_GuestState[CurrentProcessorIndex].DebuggingState.DisableTrapFlagOnContinue)
+            {
+                __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+                Rflags.TrapFlag = FALSE;
+
+                __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+                g_GuestState[CurrentProcessorIndex].DebuggingState.DisableTrapFlagOnContinue = FALSE;
+            }
+
+            //
+            // Check and handle if there is a software defined breakpoint
+            //
+            if (!BreakpointCheckAndHandleDebuggerDefinedBreakpoints(CurrentProcessorIndex,
+                                                                    g_GuestState[CurrentProcessorIndex].LastVmexitRip,
+                                                                    DEBUGGEE_PAUSING_REASON_DEBUGGEE_STEPPED,
+                                                                    GuestRegs,
+                                                                    &AvoidUnsetMtf))
+            {
+                //
+                // Handle the step
+                //
+                ContextAndTag.Context = g_GuestState[CurrentProcessorIndex].LastVmexitRip;
+                KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
+                                                      GuestRegs,
+                                                      DEBUGGEE_PAUSING_REASON_DEBUGGEE_STEPPED,
+                                                      &ContextAndTag);
+            }
+        }
+        else
+        {
+            //
+            // It's a breakpoint
+            //
+            KdHandleBreakpointAndDebugBreakpoints(CurrentProcessorIndex,
+                                                  GuestRegs,
+                                                  DEBUGGEE_PAUSING_REASON_DEBUGGEE_HARDWARE_DEBUG_REGISTER_HIT,
+                                                  &ContextAndTag);
+        }
     }
     else if (InterruptExit.Vector == EXCEPTION_VECTOR_DEBUG_BREAKPOINT)
     {
@@ -123,8 +176,6 @@ IdtEmulationHandleExceptionAndNmi(VMEXIT_INTERRUPT_INFO InterruptExit, UINT32 Cu
         if (g_GuestState[CurrentProcessorIndex].DebuggerUserModeSteppingDetails.DebugRegisterInterceptionState)
         {
             SteppingsHandleThreadChanges(GuestRegs, CurrentProcessorIndex);
-            // HvSetMonitorTrapFlag(TRUE);
-            //g_GuestState[CurrentProcessorIndex].MtfTest = TRUE;
         }
         else
         {

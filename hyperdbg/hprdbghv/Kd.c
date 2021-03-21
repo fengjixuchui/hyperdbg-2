@@ -439,6 +439,49 @@ KdRecvBuffer(CHAR *   BufferToSave,
 }
 
 /**
+ * @brief before halting any core, all the tasks will be applied to all
+ * cores including the main core
+ * @details these tasks will be applied in vmx-root
+ * 
+ * @param CurrentCore
+ * 
+ * @return VOID 
+ */
+VOID
+KdApplyTasksPreHaltCore(UINT32 CurrentCore)
+{
+    //
+    // Nothing to do !
+    //
+}
+
+/**
+ * @brief before continue any core, all the tasks will be applied to all
+ * cores including the main core
+ * @details these tasks will be applied in vmx-root
+ * 
+ * @param CurrentCore
+ * 
+ * @return VOID 
+ */
+VOID
+KdApplyTasksPostContinueCore(UINT32 CurrentCore)
+{
+    //
+    // Check to apply hardware debug register breakpoints for step-over
+    //
+    if (g_GuestState[CurrentCore].DebuggingState.HardwareDebugRegisterForStepping != NULL)
+    {
+        SteppingsSetDebugRegister(0,
+                                  BREAK_ON_INSTRUCTION_FETCH,
+                                  FALSE,
+                                  g_GuestState[CurrentCore].DebuggingState.HardwareDebugRegisterForStepping);
+
+        g_GuestState[CurrentCore].DebuggingState.HardwareDebugRegisterForStepping = NULL;
+    }
+}
+
+/**
  * @brief continue the debuggee, this function gurantees that all other cores
  * are continued (except current core)
  * @param CurrentCore
@@ -467,11 +510,8 @@ KdContinueDebuggee(UINT32                                  CurrentCore,
     // Check if we should enable RFLAGS.IF in this core or not,
     // we have another same check in SWITCHING CORES too
     //
-
     if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
     {
-        //eshtebas chon roo ye core dg darim rflag core e jario set mikonim
-
         __vmx_vmread(GUEST_RFLAGS, &Rflags);
 
         Rflags.InterruptEnableFlag = TRUE;
@@ -765,8 +805,6 @@ KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
     //
     if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
     {
-        //eshtebas chon roo ye core dg darim rflag core e jario set mikonim
-
         __vmx_vmread(GUEST_RFLAGS, &Rflags);
 
         Rflags.InterruptEnableFlag = TRUE;
@@ -1037,7 +1075,7 @@ KdHandleNmi(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
  * @return VOID 
  */
 VOID
-KdGuranteedStepInstruction(ULONG CoreId)
+KdGuaranteedStepInstruction(ULONG CoreId)
 {
     RFLAGS Rflags = {0};
 
@@ -1072,6 +1110,40 @@ KdGuranteedStepInstruction(ULONG CoreId)
     // Set the MTF flag
     //
     HvSetMonitorTrapFlag(TRUE);
+}
+
+/**
+ * @brief Regualar step-in | step one instruction to the debuggee
+ * @param CoreId 
+ * 
+ * @return VOID 
+ */
+VOID
+KdRegularStepInInstruction(UINT32 CoreId)
+{
+    RFLAGS Rflags = {0};
+
+    //
+    // We're waiting for an step
+    //
+    g_WaitForStepTrap = TRUE;
+
+    //
+    // Change guest trap flag
+    //
+    if (!g_GuestState[CoreId].DebuggingState.DisableTrapFlagOnContinue)
+    {
+        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+
+        if (Rflags.TrapFlag == FALSE)
+        {
+            Rflags.TrapFlag = TRUE;
+
+            __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
+
+            g_GuestState[CoreId].DebuggingState.DisableTrapFlagOnContinue = TRUE;
+        }
+    }
 }
 
 /**
@@ -1251,7 +1323,9 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET EventRegPacket;
     PDEBUGGEE_EVENT_AND_ACTION_HEADER_FOR_REMOTE_PACKET AddActionPacket;
     PDEBUGGER_MODIFY_EVENTS                             QueryAndModifyEventPacket;
-    UINT32                                              SizeToSend       = 0;
+    UINT64                                              NextAddressForHardwareDebugBp = 0;
+    UINT32                                              SizeToSend                    = 0;
+    ULONG                                               CoreCount;
     BOOLEAN                                             UnlockTheNewCore = FALSE;
     size_t                                              ReturnSize       = 0;
 
@@ -1327,13 +1401,13 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN_GUARANTEED)
                 {
                     //
-                    // Guaranteed step in
+                    // Guaranteed step in (i command)
                     //
 
                     //
                     // Indicate a step
                     //
-                    KdGuranteedStepInstruction(CurrentCore);
+                    KdGuaranteedStepInstruction(CurrentCore);
 
                     //
                     // Unlock just on core
@@ -1348,19 +1422,62 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 else if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN)
                 {
                     //
-                    // Step in
+                    // Step in (t command)
                     //
 
                     //
-                    // To be implemented
+                    // Indicate a step
                     //
-                    DbgBreakPoint();
+                    KdRegularStepInInstruction(CurrentCore);
+
+                    //
+                    // Unlock other cores
+                    //
+                    KdContinueDebuggee(CurrentCore, FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
+
+                    //
+                    // Continue to the debuggee
+                    //
+                    EscapeFromTheLoop = TRUE;
                 }
                 else if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_OVER)
                 {
                     //
-                    // Step over
+                    // Step over (p command)
                     //
+                    if (SteppingPacket->IsCurrentInstructionACall)
+                    {
+                        //
+                        // It's a call, we should put a hardware debug register breakpoint
+                        // on the next instruction
+                        //
+                        g_WaitForStepTrap             = TRUE;
+                        NextAddressForHardwareDebugBp = g_GuestState[CurrentCore].LastVmexitRip + SteppingPacket->CallLength;
+
+                        CoreCount = KeQueryActiveProcessorCount(0);
+
+                        for (size_t i = 0; i < CoreCount; i++)
+                        {
+                            g_GuestState[CurrentCore].DebuggingState.HardwareDebugRegisterForStepping = NextAddressForHardwareDebugBp;
+                        }
+                    }
+                    else
+                    {
+                        //
+                        // Any instruction other than call (regular step)
+                        //
+                        KdRegularStepInInstruction(CurrentCore);
+                    }
+
+                    //
+                    // Unlock other cores
+                    //
+                    KdContinueDebuggee(CurrentCore, FALSE, DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_NO_ACTION);
+
+                    //
+                    // Continue to the debuggee
+                    //
+                    EscapeFromTheLoop = TRUE;
                 }
 
                 break;
@@ -1758,6 +1875,11 @@ KdManageSystemHaltOnVmxRoot(ULONG                             CurrentCore,
     ULONG                  ExitInstructionLength = 0;
     RFLAGS                 Rflags                = {0};
 
+    //
+    // Perform Pre-halt tasks
+    //
+    KdApplyTasksPreHaltCore(CurrentCore);
+
 StartAgain:
 
     //
@@ -1815,6 +1937,18 @@ StartAgain:
         else
         {
             __vmx_vmread(VM_EXIT_INSTRUCTION_LEN, &ExitInstructionLength);
+        }
+
+        //
+        // Sometime instruction length is 0, e.g., in Trap #DB therefore we
+        // use maximum length for an instruction
+        //
+        if (ExitInstructionLength == 0)
+        {
+            if (CheckMemoryAccessSafety(g_GuestState[CurrentCore].LastVmexitRip, MAXIMUM_INSTR_SIZE))
+            {
+                ExitInstructionLength = MAXIMUM_INSTR_SIZE;
+            }
         }
 
         //
@@ -1885,6 +2019,11 @@ StartAgain:
 
         SpinlockUnlock(&g_GuestState[CurrentCore].DebuggingState.Lock);
     }
+
+    //
+    // Apply the basic task for the core before continue
+    //
+    KdApplyTasksPostContinueCore(CurrentCore);
 }
 
 /**
