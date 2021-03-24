@@ -126,6 +126,24 @@ KdUninitializeKernelDebugger()
 }
 
 /**
+ * @brief For debugging purpose, passes the errors to Windbg
+ *
+ * @return BOOLEAN
+ */
+VOID
+KdPassErrorsToWindbg()
+{
+    ULONG CoreCount;
+
+    CoreCount = KeQueryActiveProcessorCount(0);
+
+    for (size_t i = 0; i < CoreCount; i++)
+    {
+        g_GuestState[i].DebuggingState.PassErrorsToWindbg = TRUE;
+    }
+}
+
+/**
  * @brief Handles NMIs in kernel-mode
  *
  * @param Context
@@ -593,6 +611,20 @@ KdApplyTasksPostContinueCore(UINT32 CurrentCore)
 
         g_GuestState[CurrentCore].DebuggingState.HardwareDebugRegisterForStepping = NULL;
     }
+
+    //
+    // Check to apply error passing to Windbg (for debugging purpose)
+    //
+    if (g_GuestState[CurrentCore].DebuggingState.PassErrorsToWindbg)
+    {
+        //
+        // Disable hooking of breakpoint exceptions
+        //
+        HvUnsetExceptionBitmap(EXCEPTION_VECTOR_BREAKPOINT);
+        HvUnsetExceptionBitmap(EXCEPTION_VECTOR_DEBUG_BREAKPOINT);
+
+        g_GuestState[CurrentCore].DebuggingState.PassErrorsToWindbg = FALSE;
+    }
 }
 
 /**
@@ -609,8 +641,7 @@ KdContinueDebuggee(UINT32                                  CurrentCore,
                    BOOLEAN                                 PauseBreaksUntilASpecialMessageSent,
                    DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION SpeialEventResponse)
 {
-    ULONG  CoreCount;
-    RFLAGS Rflags = {0};
+    ULONG CoreCount;
 
     CoreCount = KeQueryActiveProcessorCount(0);
 
@@ -621,18 +652,24 @@ KdContinueDebuggee(UINT32                                  CurrentCore,
     }
 
     //
-    // Check if we should enable RFLAGS.IF in this core or not,
+    // Check if we should enable interrupts in this core or not,
     // we have another same check in SWITCHING CORES too
     //
-    if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
+    if (g_GuestState[CurrentCore].DebuggingState.EnableExternalInterruptsOnContinue)
     {
-        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+        //
+        // Check if the debugger has events relating to external-interrupts, if no
+        // we completely disable external interrupts
+        //
+        if (DebuggerEventListCount(&g_Events->ExternalInterruptOccurredEventsHead) == 0)
+        {
+            //
+            // There is no events for external interrupts
+            //
+            HvSetExternalInterruptExiting(FALSE);
+        }
 
-        Rflags.InterruptEnableFlag = TRUE;
-
-        __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
-
-        g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue = FALSE;
+        g_GuestState[CurrentCore].DebuggingState.EnableExternalInterruptsOnContinue = FALSE;
     }
 
     //
@@ -894,8 +931,7 @@ KdReadMemory(PGUEST_REGS Regs, PDEBUGGEE_REGISTER_READ_DESCRIPTION ReadRegisterR
 BOOLEAN
 KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
 {
-    ULONG  CoreCount;
-    RFLAGS Rflags = {0};
+    ULONG CoreCount;
 
     CoreCount = KeQueryActiveProcessorCount(0);
 
@@ -915,17 +951,23 @@ KdSwitchCore(UINT32 CurrentCore, UINT32 NewCore)
     //
 
     //
-    // Check if we should enable RFLAGS.IF in this core or not
+    // Check if we should enable interrupts in this core or not
     //
-    if (g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue)
+    if (g_GuestState[CurrentCore].DebuggingState.EnableExternalInterruptsOnContinue)
     {
-        __vmx_vmread(GUEST_RFLAGS, &Rflags);
+        //
+        // Check if the debugger has events relating to external-interrupts, if no
+        // we completely disable external interrupts
+        //
+        if (DebuggerEventListCount(&g_Events->ExternalInterruptOccurredEventsHead) == 0)
+        {
+            //
+            // There is no events for external interrupts
+            //
+            HvSetExternalInterruptExiting(FALSE);
+        }
 
-        Rflags.InterruptEnableFlag = TRUE;
-
-        __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
-
-        g_GuestState[CurrentCore].DebuggingState.EnableInterruptFlagOnContinue = FALSE;
+        g_GuestState[CurrentCore].DebuggingState.EnableExternalInterruptsOnContinue = FALSE;
     }
 
     //
@@ -1191,12 +1233,19 @@ KdHandleNmi(UINT32 CurrentProcessorIndex, PGUEST_REGS GuestRegs)
 VOID
 KdGuaranteedStepInstruction(ULONG CoreId)
 {
-    RFLAGS Rflags = {0};
+    UINT16 CsSel = 0;
+
+    //
+    // Read cs to have a trace of the execution mode of running application
+    // in the debuggee
+    //
+    __vmx_vmread(GUEST_CS_SELECTOR, &CsSel);
+    g_GuestState[CoreId].DebuggingState.InstrumentInTrace.CsSel = CsSel;
 
     //
     // Set an indicator of wait for MTF
     //
-    g_GuestState[CoreId].DebuggingState.WaitForStepOnMtf = TRUE;
+    g_GuestState[CoreId].DebuggingState.InstrumentInTrace.WaitForStepOnMtf = TRUE;
 
     //
     // Not unset again
@@ -1204,26 +1253,82 @@ KdGuaranteedStepInstruction(ULONG CoreId)
     g_GuestState[CoreId].IgnoreMtfUnset = TRUE;
 
     //
-    // Change guest rflags if needed to avoid interrupts on intr pin
+    // Change guest interrupt-state
     //
-    if (!g_GuestState[CoreId].DebuggingState.EnableInterruptFlagOnContinue)
-    {
-        __vmx_vmread(GUEST_RFLAGS, &Rflags);
-
-        if (Rflags.InterruptEnableFlag == TRUE)
-        {
-            Rflags.InterruptEnableFlag = FALSE;
-
-            __vmx_vmwrite(GUEST_RFLAGS, Rflags.Value);
-
-            g_GuestState[CoreId].DebuggingState.EnableInterruptFlagOnContinue = TRUE;
-        }
-    }
+    HvSetExternalInterruptExiting(TRUE);
+    g_GuestState[CoreId].DebuggingState.EnableExternalInterruptsOnContinue = TRUE;
 
     //
     // Set the MTF flag
     //
     HvSetMonitorTrapFlag(TRUE);
+}
+
+/**
+ * @brief Check if the execution mode (kernel-mode to user-mode or user-mode
+ * to kernel-mode) changed
+ * 
+ * @param PreviousCsSelector 
+ * @param CurrentCsSelector
+ *
+ * @return BOOLEAN 
+ */
+BOOLEAN
+KdCheckGuestOperatingModeChanges(UINT16 PreviousCsSelector, UINT16 CurrentCsSelector)
+{
+    PreviousCsSelector = PreviousCsSelector & ~3;
+    CurrentCsSelector  = CurrentCsSelector & ~3;
+
+    //
+    // Check if the execution modes are the same or not
+    //
+    if (PreviousCsSelector == CurrentCsSelector)
+    {
+        //
+        // Execution modes are not changed
+        //
+        return FALSE;
+    }
+
+    if ((PreviousCsSelector == KGDT64_R3_CODE || PreviousCsSelector == KGDT64_R3_CMCODE) && CurrentCsSelector == KGDT64_R0_CODE)
+    {
+        //
+        // User-mode -> Kernel-mode
+        //
+        LogInfo("User-mode -> Kernel-mode");
+    }
+    else if ((CurrentCsSelector == KGDT64_R3_CODE || CurrentCsSelector == KGDT64_R3_CMCODE) && PreviousCsSelector == KGDT64_R0_CODE)
+    {
+        //
+        // Kernel-mode to user-mode
+        //
+        LogInfo("Kernel-mode -> User-mode");
+
+        //
+        // Nothing to do !
+        //
+    }
+    else if ((CurrentCsSelector == KGDT64_R3_CODE && PreviousCsSelector == KGDT64_R3_CMCODE) ||
+             (PreviousCsSelector == KGDT64_R3_CODE && CurrentCsSelector == KGDT64_R3_CMCODE))
+    {
+        //
+        // Probably a heaven's gate
+        //
+        LogInfo("Heaven's gate");
+
+        //
+        // Nothing to do !
+        //
+    }
+    else
+    {
+        LogError("Unknwn changes in cs selectro during the instrument step-in");
+    }
+
+    //
+    // Execution modes are changed
+    //
+    return TRUE;
 }
 
 /**
@@ -1429,6 +1534,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
     PDEBUGGER_FLUSH_LOGGING_BUFFERS                     FlushPacket;
     PDEBUGGEE_REGISTER_READ_DESCRIPTION                 ReadRegisterPacket;
     PDEBUGGER_READ_MEMORY                               ReadMemoryPacket;
+    PDEBUGGER_EDIT_MEMORY                               EditMemoryPacket;
     PDEBUGGEE_CHANGE_PROCESS_PACKET                     ChangeProcessPacket;
     PDEBUGGEE_SCRIPT_PACKET                             ScriptPacket;
     PDEBUGGEE_USER_INPUT_PACKET                         UserInputPacket;
@@ -1512,7 +1618,7 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 SteppingPacket = (DEBUGGEE_STEP_PACKET *)(((CHAR *)TheActualPacket) +
                                                           sizeof(DEBUGGER_REMOTE_PACKET));
 
-                if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN_GUARANTEED)
+                if (SteppingPacket->StepType == DEBUGGER_REMOTE_STEPPING_REQUEST_STEP_IN_INSTRUMENT)
                 {
                     //
                     // Guaranteed step in (i command)
@@ -1749,18 +1855,44 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
                 }
                 else
                 {
-                    ReadMemoryPacket->KernelStatus = DEBUGGER_ERROR_INVALID_REGISTER_NUMBER;
+                    ReadMemoryPacket->KernelStatus = DEBUGEER_ERROR_INVALID_ADDRESS;
                 }
 
                 ReadMemoryPacket->ReturnLength = ReturnSize;
 
                 //
-                // Send the result of reading registers back to the debuggee
+                // Send the result of reading memory back to the debuggee
                 //
                 KdResponsePacketToDebugger(DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGEE_TO_DEBUGGER,
                                            DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_READING_MEMORY,
                                            (unsigned char *)ReadMemoryPacket,
                                            sizeof(DEBUGGER_READ_MEMORY) + ReturnSize);
+
+                break;
+
+            case DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_ON_VMX_ROOT_EDIT_MEMORY:
+
+                EditMemoryPacket = (PDEBUGGER_EDIT_MEMORY)(((CHAR *)TheActualPacket) +
+                                                           sizeof(DEBUGGER_REMOTE_PACKET));
+                //
+                // Edit memory
+                //
+                if (DebuggerCommandEditMemoryVmxRoot(EditMemoryPacket))
+                {
+                    EditMemoryPacket->KernelStatus = DEBUGEER_OPERATION_WAS_SUCCESSFULL;
+                }
+                else
+                {
+                    EditMemoryPacket->KernelStatus = DEBUGEER_ERROR_INVALID_ADDRESS;
+                }
+
+                //
+                // Send the result of reading memory back to the debuggee
+                //
+                KdResponsePacketToDebugger(DEBUGGER_REMOTE_PACKET_TYPE_DEBUGGEE_TO_DEBUGGER,
+                                           DEBUGGER_REMOTE_PACKET_REQUESTED_ACTION_DEBUGGEE_RESULT_OF_EDITING_MEMORY,
+                                           (unsigned char *)EditMemoryPacket,
+                                           sizeof(DEBUGGER_EDIT_MEMORY));
 
                 break;
 
@@ -1981,6 +2113,54 @@ KdDispatchAndPerformCommandsFromDebugger(ULONG CurrentCore, PGUEST_REGS GuestReg
 }
 
 /**
+ * @brief determines if the guest was in 32-bit user-mode or 64-bit (long mode) 
+ * @details this function should be called from vmx-root
+ * 
+ * @return BOOLEAN 
+ */
+BOOLEAN
+KdIsGuestOnUsermode32Bit()
+{
+    UINT16 CsSel;
+
+    //
+    // Read guest's cs selector
+    //
+    __vmx_vmread(GUEST_CS_SELECTOR, &CsSel);
+
+    if (CsSel == KGDT64_R0_CODE)
+    {
+        //
+        // 64-bit kernel-mode
+        //
+        return FALSE;
+    }
+    else if ((CsSel & ~3) == KGDT64_R3_CODE)
+    {
+        //
+        // 64-bit user-mode
+        //
+        return FALSE;
+    }
+    else if ((CsSel & ~3) == KGDT64_R3_CMCODE)
+    {
+        //
+        // 32-bit user-mode
+        //
+        return TRUE;
+    }
+    else
+    {
+        LogError("unknown value for cs, cannot determine wow64 mode.");
+    }
+
+    //
+    // By default, 64-bit
+    //
+    return FALSE;
+}
+
+/**
  * @brief manage system halt on vmx-root mode 
  * @details Thuis function should only be called from KdHandleBreakpointAndDebugBreakpoints
  * @param CurrentCore  
@@ -2034,9 +2214,10 @@ StartAgain:
         PausePacket.CurrentCore = CurrentCore;
 
         //
-        // Set the RIP
+        // Set the RIP and mode of execution
         //
-        PausePacket.Rip = g_GuestState[CurrentCore].LastVmexitRip;
+        PausePacket.Rip            = g_GuestState[CurrentCore].LastVmexitRip;
+        PausePacket.Is32BitAddress = KdIsGuestOnUsermode32Bit();
 
         //
         // Set rflags for finding the results of conditional jumps
