@@ -637,78 +637,164 @@ GetTerminalId(TOKEN Token)
 *
 *
 */
-char
-IsEqual(const TOKEN Token1, const TOKEN Token2)
+int LalrGetNonTerminalId(TOKEN Token)
 {
-    if (Token1->Type == Token2->Type)
-    {
-        if (Token1->Type == SPECIAL_TOKEN)
-        {
-            if (!strcmp(Token1->Value, Token2->Value))
-            {
-                return 1;
-            }
-        }
-        else
-        {
-            return 1;
-        }
-    }
-    return 0;
+	for (int i = 0; i < LALR_NONTERMINAL_COUNT; i++) 
+	{
+		if (!strcmp(Token->Value, LalrNoneTerminalMap[i]))
+			return i;
+	}
+	return -1;
 }
 
-void
-SetType(unsigned long long * Val, unsigned char Type)
+/**
+*
+*
+*
+*/
+int LalrGetTerminalId(TOKEN Token)
 {
-    *Val = (unsigned long long int)Type;
+
+	for (int i = 0; i < LALR_TERMINAL_COUNT; i++)
+	{
+		if (Token->Type == HEX)
+		{
+			if (!strcmp("_hex", LalrTerminalMap[i]))
+				return i;
+		}
+		else if (Token->Type == ID)
+		{
+			if (!strcmp("_id", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == REGISTER)
+		{
+			if (!strcmp("_register", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == PSEUDO_REGISTER)
+		{
+			if (!strcmp("_pseudo_register", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == DECIMAL)
+		{
+			if (!strcmp("_decimal", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == BINARY)
+		{
+			if (!strcmp("_binary", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == OCTAL)
+		{
+			if (!strcmp("_octal", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+		else if (Token->Type == STRING)
+		{
+			if (!strcmp("_string", LalrTerminalMap[i]))
+			{
+				return i;
+			}
+		}
+
+		else // Keyword
+		{
+			if (!strcmp(Token->Value, LalrTerminalMap[i]))
+				return i;
+		}
+	}
+	return -1;
+
 }
 
-unsigned long long int
-DecimalToInt(char * str)
+/**
+*
+*
+*
+*/
+char IsEqual(const TOKEN Token1, const TOKEN Token2)
 {
-    unsigned long long int acc = 0;
-    for (int i = 0; i < strlen(str); i++)
-    {
-        acc *= 10;
-        acc += (str[i] - '0');
-    }
-    return acc;
+	if (Token1->Type == Token2->Type)
+	{
+		if (Token1->Type == SPECIAL_TOKEN)
+		{
+			if (!strcmp(Token1->Value, Token2->Value))
+			{
+				return 1;
+			}
+		}
+		else
+		{
+			return 1;
+		}
+	}
+	return 0;
 }
-unsigned long long int
-HexToInt(char * str)
-{
-    char                   temp;
-    unsigned long long int acc = 0;
-    for (int i = 0; i < strlen(str); i++)
-    {
-        acc <<= 4;
-        if (str[i] >= '0' && str[i] <= '9')
-        {
-            temp = str[i] - '0';
-        }
-        else if (str[i] >= 'a' && str[i] <= 'f')
-        {
-            temp = str[i] - 'a' + 10;
-        }
-        else
-        {
-            temp = str[i] - 'A' + 10;
-        }
-        acc += temp;
-    }
 
-    return acc;
-}
-unsigned long long int
-OctalToInt(char * str)
+
+void SetType(unsigned long long* Val, unsigned char Type)
 {
-    unsigned long long int acc = 0;
-    for (int i = 0; i < strlen(str); i++)
-    {
-        acc <<= 3;
-        acc += (str[i] - '0');
-    }
-    return acc;
+	*Val = (unsigned long long int)Type;
+}
+
+unsigned long long int DecimalToInt(char* str)
+{
+	unsigned long long int acc = 0;
+	for (int i = 0; i < strlen(str); i++)
+	{
+		acc *= 10;
+		acc += (str[i] - '0');
+	}
+	return acc;
+}
+unsigned long long int HexToInt(char* str)
+{
+	char temp;
+	unsigned long long int acc = 0;
+	for (int i = 0; i < strlen(str); i++)
+	{
+		acc <<= 4;
+		if (str[i] >= '0' && str[i] <= '9')
+		{
+			temp = str[i] - '0';
+		}
+		else if (str[i] >= 'a' && str[i] <= 'f')
+		{
+			temp = str[i] - 'a' + 10;
+		}
+		else
+		{
+			temp = str[i] - 'A' + 10;
+		}
+		acc += temp;
+	}
+
+	return acc;
+}
+unsigned long long int OctalToInt(char* str)
+{
+	unsigned long long int acc = 0;
+	for (int i = 0; i < strlen(str); i++)
+	{
+		acc <<= 3;
+		acc += (str[i] - '0');
+	}
+	return acc;
 }
 unsigned long long int
 BinaryToInt(char * str)

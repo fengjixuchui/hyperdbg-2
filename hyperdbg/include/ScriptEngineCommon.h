@@ -1440,7 +1440,8 @@ GetRegValue(PGUEST_REGS GuestRegs, REGS_ENUM RegId)
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-        return GetGuestIdtr();
+
+    return GetGuestIdtr();
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
         break;
@@ -1453,6 +1454,7 @@ GetRegValue(PGUEST_REGS GuestRegs, REGS_ENUM RegId)
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
         return GetGuestGdtr();
+
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
         break;
@@ -1785,7 +1787,9 @@ SetRegValue(PGUEST_REGS GuestRegs, PSYMBOL Symbol, UINT64 Value)
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-        SetGuestIdtr(Value);
+
+    SetGuestIdtr(Value);
+
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
         break;
@@ -1797,7 +1801,9 @@ SetRegValue(PGUEST_REGS GuestRegs, PSYMBOL Symbol, UINT64 Value)
 #endif // SCRIPT_ENGINE_USER_MODE
 
 #ifdef SCRIPT_ENGINE_KERNEL_MODE
-        SetGuestGdtr(Value);
+
+    SetGuestGdtr(Value);
+
 #endif // SCRIPT_ENGINE_KERNEL_MODE
 
     case REGISTER_CR0:

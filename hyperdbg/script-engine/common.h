@@ -125,8 +125,11 @@ IsEqual(const TOKEN Token1, const TOKEN Token2);
 int
 GetNonTerminalId(TOKEN Token);
 
-int
-GetTerminalId(TOKEN Token);
+
+int LalrGetNonTerminalId(TOKEN Token);
+
+int LalrGetTerminalId(TOKEN Token);
+
 
 ////////////////////////////////////////////////////
 //					Util Functions				  //

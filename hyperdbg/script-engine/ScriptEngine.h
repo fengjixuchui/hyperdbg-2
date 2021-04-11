@@ -51,8 +51,15 @@ ToSymbol(TOKEN Token);
 
 __declspec(dllexport) PSYMBOL_BUFFER ScriptEngineParse(char * str);
 
-void
-CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator);
+void ScriptEngineBooleanExpresssionParse
+(
+	TOKEN_LIST InputTokens,
+	TOKEN_LIST MatchedStack, 
+	PSYMBOL_BUFFER CodeBuffer
+);
+
+
+void CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator);
 
 unsigned long long int
 RegisterToInt(char * str);

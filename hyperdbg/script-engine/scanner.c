@@ -577,15 +577,25 @@ sgetc(char * str)
 char
 IsKeyword(char * str)
 {
-    int n = KEYWORD_LIST_LENGTH;
-    for (int i = 0; i < n; i++)
-    {
-        if (!strcmp(str, KeywordList[i]))
-        {
-            return 1;
-        }
-    }
-    return 0;
+
+	int n = KEYWORD_LIST_LENGTH;
+	for (int i = 0; i < n; i++)
+	{
+		if (!strcmp(str, KeywordList[i]))
+		{
+			return 1;
+		}
+	}
+	n = TERMINAL_COUNT;
+	for (int i = 0; i < n; i++)
+	{
+		if (!strcmp(str, TerminalMap[i]))
+		{
+			return 1; 
+		}
+	}
+
+	return 0;
 }
 
 char
