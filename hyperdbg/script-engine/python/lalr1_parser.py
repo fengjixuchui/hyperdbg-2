@@ -44,7 +44,9 @@ class LALR1Parser:
         # maximum of "Right Hand Side(Rhs)" length
         self.MAXIMUM_RHS_LEN = 0
 
-        self.SPECIAL_TOKENS = ['%', '+', '-', "*", "/", "=", ",", ";", "(", ")", "{", "}", "|", ">>", "<<", "&", "^"]
+        self.SPECIAL_TOKENS = ['%', '+', '-', "*", "/", "=", "==", "!=", ",", ";", "(", ")", "{", "}", "|", "||", ">>", ">=", "<<", "<=", "&", "&&", "^"]
+
+
 
         # INVALID rule indicator
         self.INVALID = -99 
@@ -84,6 +86,7 @@ class LALR1Parser:
         self.WriteTerminalList()
 
         self.WriteParseTable()
+        self.WriteSemanticRules()
 
         self.HeaderFile.write("#endif\n")
         
@@ -163,6 +166,29 @@ class LALR1Parser:
         self.SourceFile.write("};\n")
 
  
+    def WriteSemanticRules(self):
+        
+        self.SourceFile.write("const struct _TOKEN LalrSemanticRules[RULES_COUNT]= \n{\n")
+        self.HeaderFile.write("extern const struct _TOKEN LalrSemanticRules[RULES_COUNT];\n") 
+        for rule in self.SemanticList:
+            print(rule)
+
+        Counter = 0 
+        for SemanticRule in self.SemanticList:
+            if Counter == len(self.SemanticList)-1:
+                if SemanticRule == None:
+                    self.SourceFile.write("\t{UNKNOWN, " + "\""+"\"}" + "\n")
+                else:
+                    self.SourceFile.write("\t{SEMANTIC_RULE, " + "\"" + SemanticRule+ "\"}" + "\n")
+            else:
+                if SemanticRule == None:
+                    self.SourceFile.write("\t{UNKNOWN, " + "\""+"\"}" + ",\n")
+                else:
+                    self.SourceFile.write("\t{SEMANTIC_RULE, " + "\"" + SemanticRule+ "\"}" + ",\n")
+            Counter +=1
+        self.SourceFile.write("};\n")
+
+
 
 
     
@@ -215,6 +241,7 @@ class LALR1Parser:
             MapKeywordIdx1 = 0
             MapKeywordIdx2 = 0
             Idx = 0
+   
             for X in Rhs:
                 if X[0] == ".":
                     HasMapKeyword = True
@@ -317,8 +344,8 @@ class LALR1Parser:
 
 
     def WriteActionTable(self):
-        self.SourceFile.write("const int LalrActionTable[LALR_STATE_COUNT][LALR_NONTERMINAL_COUNT]= \n{\n")
-        self.HeaderFile.write("extern const int LalrActionTable[LALR_STATE_COUNT][LALR_NONTERMINAL_COUNT];\n")
+        self.SourceFile.write("const int LalrActionTable[LALR_STATE_COUNT][LALR_TERMINAL_COUNT]= \n{\n")
+        self.HeaderFile.write("extern const int LalrActionTable[LALR_STATE_COUNT][LALR_TERMINAL_COUNT];\n")
         i = 0
         for Row in self.ActionTable:
             j = 0
@@ -362,9 +389,9 @@ class LALR1Parser:
     # This function simulates of script engine parser in ScriptEngine.c in
     # order to test the generated "Parse Table"
     def Parse(self, Tokens, InputSize):
-        print("Lalr parser called...\n")
-        print("Tokens : ", end = "")
-        print(Tokens)
+        # print("Lalr parser called...\n")
+        # print("Tokens : ", end = "")
+        # print(Tokens)
 
         ReadCount = 0
 
@@ -386,7 +413,7 @@ class LALR1Parser:
             Top = GetTop(Stack)
             # for key, value in self.ParseTable.action.items() :
             #     print (key, value)
-            print("CurrentIn: ", CurrentIn)
+            # print("CurrentIn: ", CurrentIn)
             Action = self.ParseTable.action[Top][CurrentIn] 
             # print("Action:",Action)
             # print()
@@ -395,18 +422,18 @@ class LALR1Parser:
             for Element in Action:
                 Type = Element[0]
                 StateId = Element[1]
-            print("Stack:", end =" ")
-            print(Stack)
+            # print("Stack:", end =" ")
+            # print(Stack)
 
-            print("Tokens:", end =" ")
-            print(Tokens)
+            # print("Tokens:", end =" ")
+            # print(Tokens)
             
-            print("CurrentIn: ", CurrentIn)
+            # print("CurrentIn: ", CurrentIn)
             
-            print("Action : ", Action,'\n\n')
+            # print("Action : ", Action,'\n\n')
             
-            print("Matched Stack:", end = " ")
-            print(MatchedStack)
+            # print("Matched Stack:", end = " ")
+            # print(MatchedStack)
         
 
             
@@ -466,7 +493,7 @@ class LALR1Parser:
                 RhsLen = get_length(Rhs)
 
                 SemanticRule = self.SemanticList[StateId - 1]
-                print("Semantic Rule :", SemanticRule)
+                # print("Semantic Rule :", SemanticRule)
                 # print("Rhs : ", Rhs)
                 Operand = None 
                 for i in range(RhsLen * 2):
@@ -528,16 +555,17 @@ class LALR1Parser:
                 # x = input()
 
             elif Type == 'accept':
-                print("Accepted")
-                print()
-                x = input()
+                # print("Accepted")
+                # print()
+                # x = input()
                 return Tokens
             else :
                 
-                print("Error")
-                print(Stack)
-                print()
-                x = input()
+                # print("Error")
+                # print(Stack)
+                # print()
+                # x = input()
+                pass
 
 
             

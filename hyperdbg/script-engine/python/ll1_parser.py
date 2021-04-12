@@ -46,7 +46,7 @@ class LL1Parser:
         self.MAXIMUM_RHS_LEN = 0
 
 
-        self.SPECIAL_TOKENS = ['%', '+', '-', "*", "/", "=", ",", ";", "(", ")", "{", "}", "|", ">>", "<<", "&", "^"]
+        self.SPECIAL_TOKENS = ['%', '+', '-', "*", "/", "=", "==", "!=", ",", ";", "(", ")", "{", "}", "|", "||", ">>", ">=", "<<", "<=", "&", "&&", "^"]
 
         # INVALID rule indicator
         self.INVALID = -99
@@ -56,6 +56,7 @@ class LL1Parser:
         self.RegistersList = []
         self.PseudoRegistersList = []
         self.keywordList = []
+        self.SemantiRulesList = []
 
 
         # Dictionaries used for storing first and follow sets 
@@ -107,7 +108,7 @@ class LL1Parser:
         self.HeaderFile.write("#define OPERATORS_LIST_LENGTH " + str(len(self.OperatorsList)) + "\n")
         self.HeaderFile.write("#define REGISTER_MAP_LIST_LENGTH " + str(len(self.RegistersList))+ "\n")
         self.HeaderFile.write("#define PSEUDO_REGISTER_MAP_LIST_LENGTH " + str(len(self.PseudoRegistersList))+ "\n")
-        self.HeaderFile.write("#define SEMANTIC_RULES_MAP_LIST_LENGTH " + str(len(self.keywordList) + len(self.OperatorsList) + 1)+ "\n")
+        self.HeaderFile.write("#define SEMANTIC_RULES_MAP_LIST_LENGTH " + str(len(self.keywordList) + len(self.OperatorsList) + len(self.SemantiRulesList))+ "\n")
         for Key in self.FunctionsDict:
             self.HeaderFile.write("#define "+ Key[1:].upper() + "_LENGTH "+ str(len(self.FunctionsDict[Key]))+"\n")
 
@@ -292,7 +293,7 @@ class LL1Parser:
                     y = input()
 
                 elif Top == "@JZCMPL":
-                    print("JZCMPL:")
+                    print("JZCOMPELETED:")
                     print(Stack)
                     print(Tokens)
                     print("\n\n")
@@ -344,6 +345,9 @@ class LL1Parser:
                 if L[0][1:] == "Operators":
                     self.OperatorsList += Elements
                     continue
+                elif L[0][1:] == "SemantiRules":
+                    self.SemantiRulesList += Elements
+                    continue
                 elif L[0][1:] == "Registers":
                     self.RegistersList += Elements
                     continue
@@ -369,6 +373,8 @@ class LL1Parser:
                 elif X[0] == "@":
                     if X[1] == ".":
                         MapKeywordIdx2 = Idx
+                   
+
                 Idx += 1
 
             if not HasMapKeyword:
@@ -378,6 +384,8 @@ class LL1Parser:
                 for X in Rhs:
                     if not self.IsNoneTerminal(X) and not self.IsSemanticRule(X) and not X=="eps":
                         self.TerminalSet.add(X)
+                    if self.IsSemanticRule(X):
+                        pass
             
             else:
              
@@ -408,6 +416,7 @@ class LL1Parser:
         self.NonTerminalList = list(self.NonTerminalSet)
         
         self.TerminalList = list(self.TerminalSet)
+        print(self.keywordList)
 
         
     def WriteSemanticMaps(self):
@@ -416,12 +425,14 @@ class LL1Parser:
         for X in self.OperatorsList:
             self.CommonHeaderFile.write("#define " + "FUNC_" + X.upper() + " " + str(Counter) + "\n")
             Counter += 1
+        
+        for X in self.SemantiRulesList:
+            self.CommonHeaderFile.write("#define " + "FUNC_" + X.upper() + " " + str(Counter) + "\n")
+            Counter += 1
 
         for X in self.keywordList:
             self.CommonHeaderFile.write("#define " + "FUNC_" + X.upper() + " " + str(Counter) + "\n")
             Counter += 1
-        self.CommonHeaderFile.write("#define "+ "FUNC_MOV " + str(Counter) + "\n")
-        self.CommonHeaderFile.write("#define "+ "FUNC_VARGSTART " + str(Counter+1) + "\n\n")
 
 
 
@@ -431,10 +442,12 @@ class LL1Parser:
         for X in self.OperatorsList:
             self.SourceFile.write("{\"@" + X.upper() + "\", "+ "FUNC_" + X.upper()   + "},\n")
 
+        for X in self.SemantiRulesList:
+            self.SourceFile.write("{\"@" + X.upper() + "\", "+ "FUNC_" + X.upper()   + "},\n")
+
         for X in self.keywordList:
                 self.SourceFile.write("{\"@" + X.upper() + "\", "+ "FUNC_" + X.upper()   + "},\n")
 
-        self.SourceFile.write("{\"@" + "MOV" + "\", "+ "FUNC_MOV"  + "}\n")
         
 
         self.SourceFile.write("};\n")
