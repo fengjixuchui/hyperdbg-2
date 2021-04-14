@@ -49,6 +49,7 @@ ScriptEngineParse(char * str)
     int  TerminalId;
     int  RuleId;
     char c;
+    BOOL WaitForWaitStatementBooleanExpression = FALSE;
 
     //
     // Initialize Scanner
@@ -104,44 +105,9 @@ ScriptEngineParse(char * str)
         {
             if (TopToken->Value == "BOOLEAN_EXPRESSION")
             {
-                LALRInputTokens = NewTokenList();
-                Push(LALRInputTokens, CurrentIn);
+                UINT64 BooleanExpressionSize = BooleanExpressionExtractEnd(str, &WaitForWaitStatementBooleanExpression);
 
-                int OpenParanthesesCount = 1;
-                if (!strcmp(CurrentIn->Value, "("))
-                {
-                    OpenParanthesesCount++;
-                }
-
-                while (1)
-                {
-                    CurrentIn = Scan(str, &c);
-
-                    if (!strcmp(CurrentIn->Value, "("))
-                    {
-                        OpenParanthesesCount++;
-                        Push(LALRInputTokens, CurrentIn);
-                    }
-                    else if (!strcmp(CurrentIn->Value, ")"))
-                    {
-                        OpenParanthesesCount--;
-                        if (OpenParanthesesCount <= 0)
-                        {
-                            break;
-                        }
-                        else
-                        {
-                            Push(LALRInputTokens, CurrentIn);
-                        }
-                    }
-                    else
-                    {
-                        Push(LALRInputTokens, CurrentIn);
-                    }
-                }
-
-                Push(LALRInputTokens, EndToken);
-                char * Message = ScriptEngineBooleanExpresssionParse(LALRInputTokens, MatchedStack, CodeBuffer, str);
+                char * Message = ScriptEngineBooleanExpresssionParse(BooleanExpressionSize, CurrentIn, MatchedStack, CodeBuffer, str, &c);
                 if (Message != NULL)
                 {
                     CodeBuffer->Message = Message;
@@ -153,6 +119,7 @@ ScriptEngineParse(char * str)
                     return CodeBuffer;
                 }
 
+                CurrentIn = Scan(str, &c);
                 CurrentIn = Scan(str, &c);
                 if (CurrentIn->Type == UNKNOWN)
                 {
@@ -242,8 +209,13 @@ ScriptEngineParse(char * str)
 
                 // char t = getchar();
             }
+
             else
             {
+                if (!strcmp(TopToken->Value, "@START_OF_FOR"))
+                {
+                    WaitForWaitStatementBooleanExpression = TRUE;
+                }
                 CodeGen(MatchedStack, CodeBuffer, TopToken);
             }
         }
@@ -416,7 +388,7 @@ CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator)
     {
         PushSymbol(CodeBuffer, OperatorSymbol);
     }
-    else if (IsNaiveOperator(Operator))
+    else if (IsTwoOperandOperator(Operator))
     {
         PushSymbol(CodeBuffer, OperatorSymbol);
         Op0       = Pop(MatchedStack);
@@ -440,6 +412,19 @@ CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator)
         //
         FreeTemp(Op0);
         FreeTemp(Op1);
+    }
+    else if (IsOneOperandOperator(Operator))
+    {
+        PushSymbol(CodeBuffer, OperatorSymbol);
+        Op0       = Pop(MatchedStack);
+        Op0Symbol = ToSymbol(Op0);
+        PushSymbol(CodeBuffer, Op0Symbol);
+        RemoveSymbol(Op0Symbol);
+
+        //
+        // Free the operand if it is a temp value
+        //
+        FreeTemp(Op0);
     }
     else if (!strcmp(Operator->Value, "@VARGSTART"))
     {
@@ -569,8 +554,7 @@ CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator)
         //
         TOKEN  JumpAddressToken = Pop(MatchedStack);
         UINT64 JumpAddress      = DecimalToInt(JumpAddressToken->Value);
-        printf("While start address : %x\n", JumpAddress);
-        JumpAddressSymbol = ToSymbol(JumpSemanticAddressToken);
+        JumpAddressSymbol       = ToSymbol(JumpAddressToken);
         PushSymbol(CodeBuffer, JumpAddressSymbol);
         RemoveSymbol(JumpAddressSymbol);
     }
@@ -609,14 +593,174 @@ CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator)
         //
         TOKEN  JumpAddressToken = Pop(MatchedStack);
         UINT64 JumpAddress      = DecimalToInt(JumpAddressToken->Value);
-        printf("While start address : %x\n", JumpAddress);
+
         PSYMBOL JumpAddressSymbol = ToSymbol(JumpAddressToken);
         PushSymbol(CodeBuffer, JumpAddressSymbol);
         RemoveSymbol(JumpAddressSymbol);
 
         FreeTemp(Op0);
     }
+    else if (!strcmp(Operator->Value, "@START_OF_FOR"))
+    {
+        //
+        // Push current pointer into matched stack
+        //
+        UINT64 CurrentPointer      = CodeBuffer->Pointer;
+        TOKEN  CurrentAddressToken = NewToken();
+        CurrentAddressToken->Type  = DECIMAL;
 
+        char * str = malloc(16);
+        sprintf(str, "%llu", CurrentPointer);
+        CurrentAddressToken->Value = str;
+        Push(MatchedStack, CurrentAddressToken);
+    }
+    else if (!strcmp(Operator->Value, "@FOR_INC_DEC"))
+    {
+        //
+        // JZ
+        //
+
+        //
+        // Add jz instruction to Code Buffer
+        //
+        PSYMBOL JnzInstruction = NewSymbol();
+        JnzInstruction->Type   = SYMBOL_SEMANTIC_RULE_TYPE;
+        JnzInstruction->Value  = FUNC_JZ;
+        PushSymbol(CodeBuffer, JnzInstruction);
+        RemoveSymbol(JnzInstruction);
+
+        //
+        // Add Op0 to CodeBuffer
+        //
+        Op0       = Pop(MatchedStack);
+        Op0Symbol = ToSymbol(Op0);
+        PushSymbol(CodeBuffer, Op0Symbol);
+        RemoveSymbol(Op0Symbol);
+
+        //
+        // Add JZ addresss to Code CodeBuffer
+        //
+        PSYMBOL JnzAddressSymbol = NewSymbol();
+        JnzAddressSymbol->Type   = SYMBOL_NUM_TYPE;
+        JnzAddressSymbol->Value  = 0xffffffffffffffff;
+        PushSymbol(CodeBuffer, JnzAddressSymbol);
+        RemoveSymbol(JnzAddressSymbol);
+
+        //
+        // JMP
+        //
+
+        //
+        // Add jmp instruction to Code Buffer
+        //
+        PSYMBOL JumpInstruction = NewSymbol();
+        JumpInstruction->Type   = SYMBOL_SEMANTIC_RULE_TYPE;
+        JumpInstruction->Value  = FUNC_JMP;
+        PushSymbol(CodeBuffer, JumpInstruction);
+        RemoveSymbol(JumpInstruction);
+
+        //
+        // Add jmp addresss to Code CodeBuffer
+        //
+        PSYMBOL JumpAddressSymbol = NewSymbol();
+        JumpAddressSymbol->Type   = SYMBOL_NUM_TYPE;
+        JumpAddressSymbol->Value  = 0xffffffffffffffff;
+        PushSymbol(CodeBuffer, JumpAddressSymbol);
+        RemoveSymbol(JumpAddressSymbol);
+
+        //
+        // Pop start_of_for address
+        //
+        TOKEN StartOfForToken = Pop(MatchedStack);
+
+        //
+        // Push current pointer into matched stack
+        //
+        UINT64 CurrentPointer      = CodeBuffer->Pointer;
+        TOKEN  CurrentAddressToken = NewToken();
+        CurrentAddressToken->Type  = DECIMAL;
+
+        char * str = malloc(16);
+        sprintf(str, "%llu", CurrentPointer);
+        CurrentAddressToken->Value = str;
+        Push(MatchedStack, CurrentAddressToken);
+
+        //
+        // Push start_of_for address to matched stack
+        //
+        Push(MatchedStack, StartOfForToken);
+    }
+    else if (!strcmp(Operator->Value, "@START_OF_FOR_COMMANDS"))
+    {
+        //
+        // JMP
+        //
+
+        //
+        // Add jmp instruction to Code Buffer
+        //
+        PSYMBOL JumpInstruction = NewSymbol();
+        JumpInstruction->Type   = SYMBOL_SEMANTIC_RULE_TYPE;
+        JumpInstruction->Value  = FUNC_JMP;
+        PushSymbol(CodeBuffer, JumpInstruction);
+        RemoveSymbol(JumpInstruction);
+
+        //
+        // Add jmp address to Code buffer
+        //
+        TOKEN  JumpAddressToken = Pop(MatchedStack);
+        UINT64 JumpAddress      = DecimalToInt(JumpAddressToken->Value);
+
+        PSYMBOL JumpAddressSymbol = ToSymbol(JumpAddressToken);
+        PushSymbol(CodeBuffer, JumpAddressSymbol);
+        RemoveSymbol(JumpAddressSymbol);
+
+        //
+        // Set jmp address
+        //
+        PUINT64 CurrentPointer   = CodeBuffer->Pointer;
+        JumpAddressToken         = Pop(MatchedStack);
+        JumpAddress              = DecimalToInt(JumpAddressToken->Value);
+        JumpAddressSymbol        = (PSYMBOL)(CodeBuffer->Head + JumpAddress - 1);
+        JumpAddressSymbol->Value = CurrentPointer;
+
+        //
+        // Push start of inc_dec address to mathced stack
+        //
+        Push(MatchedStack, JumpAddressToken);
+    }
+    else if (!strcmp(Operator->Value, "@END_OF_FOR"))
+    {
+        //
+        // JMP
+        //
+
+        //
+        // Add jmp instruction to Code Buffer
+        //
+        PSYMBOL JumpInstruction = NewSymbol();
+        JumpInstruction->Type   = SYMBOL_SEMANTIC_RULE_TYPE;
+        JumpInstruction->Value  = FUNC_JMP;
+        PushSymbol(CodeBuffer, JumpInstruction);
+        RemoveSymbol(JumpInstruction);
+
+        //
+        // Add jmp address to Code buffer
+        //
+        TOKEN  JumpAddressToken = Pop(MatchedStack);
+        UINT64 JumpAddress      = DecimalToInt(JumpAddressToken->Value);
+
+        PSYMBOL JumpAddressSymbol = ToSymbol(JumpAddressToken);
+        PushSymbol(CodeBuffer, JumpAddressSymbol);
+        RemoveSymbol(JumpAddressSymbol);
+
+        //
+        // Set jz address
+        //
+        PUINT64 CurrentPointer   = CodeBuffer->Pointer;
+        JumpAddressSymbol        = (PSYMBOL)(CodeBuffer->Head + JumpAddress - 3);
+        JumpAddressSymbol->Value = CurrentPointer;
+    }
     else
     {
         printf("Internal Error: Unhandled semantic ruls.\n");
@@ -625,16 +769,54 @@ CodeGen(TOKEN_LIST MatchedStack, PSYMBOL_BUFFER CodeBuffer, TOKEN Operator)
     return;
 }
 
+UINT64
+BooleanExpressionExtractEnd(char * str, BOOL * WaitForWaitStatementBooleanExpression)
+{
+    UINT64 BooleanExpressionSize = 0;
+    if (*WaitForWaitStatementBooleanExpression)
+    {
+        while (str[InputIdx + BooleanExpressionSize - 1] != ';')
+        {
+            BooleanExpressionSize += 1;
+        }
+        *WaitForWaitStatementBooleanExpression = FALSE;
+        return InputIdx + BooleanExpressionSize - 1;
+    }
+    else
+    {
+        int OpenParanthesesCount = 1;
+        while (str[InputIdx + BooleanExpressionSize - 1] != '\0')
+        {
+            if (str[InputIdx + BooleanExpressionSize - 1] == ')')
+            {
+                OpenParanthesesCount--;
+                if (OpenParanthesesCount == 0)
+                {
+                    return InputIdx + BooleanExpressionSize - 1;
+                }
+            }
+            else if (str[InputIdx + BooleanExpressionSize - 1] == '(')
+            {
+                OpenParanthesesCount++;
+            }
+            BooleanExpressionSize++;
+        }
+    }
+    return -1;
+}
+
 /**
 *
 *
 */
 char *
 ScriptEngineBooleanExpresssionParse(
-    TOKEN_LIST     InputTokens,
+    UINT64         BooleanExpressionSize,
+    TOKEN          FirstToken,
     TOKEN_LIST     MatchedStack,
     PSYMBOL_BUFFER CodeBuffer,
-    char *         str)
+    char *         str,
+    char *         c)
 {
     TOKEN_LIST Stack = NewTokenList();
 
@@ -645,26 +827,28 @@ ScriptEngineBooleanExpresssionParse(
 
     Push(Stack, State);
 
-#ifdef _SCRIPT_ENGINE_DBG_EN
-    printf("----------------------------------------\n");
-    PrintTokenList(InputTokens);
-    printf("----------------------------------------\n");
-#endif //  _SCRIPT_ENGINE_DBG_EN
+    //
+    // End of File Token
+    //
+    TOKEN EndToken = NewToken();
+    EndToken->Type = END_OF_STACK;
+    strcpy(EndToken->Value, "$");
 
-    TOKEN CurrentIn;
+    TOKEN CurrentIn = FirstToken;
     TOKEN TopToken;
     TOKEN Lhs;
     TOKEN Temp;
     TOKEN Operand = NewToken();
     TOKEN SemanticRule;
 
-    int Action       = INVALID;
-    int StateId      = 0;
-    int Goto         = 0;
-    int InputPointer = 0;
-    int RhsSize      = 0;
+    int          Action       = INVALID;
+    int          StateId      = 0;
+    int          Goto         = 0;
+    int          InputPointer = 0;
+    int          RhsSize      = 0;
+    unsigned int InputIdxTemp;
+    char         Ctemp;
 
-    CurrentIn = InputTokens->Head[InputPointer++];
     while (1)
     {
         TopToken       = Top(Stack);
@@ -703,7 +887,15 @@ ScriptEngineBooleanExpresssionParse(
             sprintf(State->Value, "%d", StateId);
             Push(Stack, State);
 
-            CurrentIn = InputTokens->Head[InputPointer++];
+            InputIdxTemp = InputIdx;
+            Ctemp        = *c;
+            CurrentIn    = Scan(str, c);
+            if (InputIdx - 1 > BooleanExpressionSize)
+            {
+                InputIdx  = InputIdxTemp;
+                *c        = Ctemp;
+                CurrentIn = EndToken;
+            }
         }
         else if (Action < 0) // Reduce
         {
