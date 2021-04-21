@@ -1063,7 +1063,7 @@ KdReceivePacketFromDebuggee(CHAR *   BufferToSave,
             // Invalid buffer
             //
             ShowMessages("err, a buffer received in which exceeds the "
-                         "buffer limitation.\n");
+                         "buffer limitation\n");
             return FALSE;
         }
 
@@ -1121,7 +1121,7 @@ KdSendPacketToDebuggee(const CHAR * Buffer, UINT32 Length, BOOLEAN SendEndOfBuff
     //
     if (g_SerialRemoteComPortHandle == NULL)
     {
-        ShowMessages("err, handle to remote debuggee's com port is not found.\n");
+        ShowMessages("err, handle to remote debuggee's com port is not found\n");
         return FALSE;
     }
 
@@ -1423,7 +1423,7 @@ StartAgain:
     //
     // Show an indication to connect the debugger
     //
-    ShowMessages("waiting for debuggee to connect ...\n");
+    ShowMessages("waiting for debuggee to connect...\n");
 
     if (!IsNamedPipe)
     {
@@ -1620,7 +1620,7 @@ KdPrepareAndConnectDebugPort(const char * PortName, DWORD Baudrate, UINT32 Port,
 
         if (Comm == INVALID_HANDLE_VALUE)
         {
-            ShowMessages("err, port can't be opened.\n");
+            ShowMessages("err, port can't be opened\n");
             return FALSE;
         }
 
@@ -2088,7 +2088,7 @@ KdRegisterEventInDebuggee(PDEBUGGER_GENERAL_EVENT_DETAIL EventRegBuffer,
 
     if (!g_DeviceHandle)
     {
-        ShowMessages("handle of driver , probably the driver is not loaded. Did you "
+        ShowMessages("handle of the driver not found, probably the driver is not loaded. Did you "
                      "use 'load' command?\n");
         return FALSE;
     }
@@ -2147,7 +2147,7 @@ KdAddActionToEventInDebuggee(PDEBUGGER_GENERAL_ACTION ActionAddingBuffer,
 
     if (!g_DeviceHandle)
     {
-        ShowMessages("handle of driver , probably the driver is not loaded. Did you "
+        ShowMessages("handle of the driver not found, probably the driver is not loaded. Did you "
                      "use 'load' command?\n");
         return FALSE;
     }
@@ -2208,7 +2208,7 @@ KdSendModifyEventInDebuggee(PDEBUGGER_MODIFY_EVENTS ModifyEvent)
     //
     if (!g_DeviceHandle)
     {
-        ShowMessages("handle of driver , probably the driver is not loaded. Did you "
+        ShowMessages("handle of the driver not found, probably the driver is not loaded. Did you "
                      "use 'load' command?\n");
         return FALSE;
     }

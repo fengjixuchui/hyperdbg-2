@@ -346,7 +346,7 @@ ReadIrpBasedBuffer()
                                         ReturnedLength - sizeof(UINT32) + 1))
                                 {
                                     ShowMessages("err, there was an error transferring the "
-                                                 "message to the remote sources.\n");
+                                                 "message to the remote sources\n");
                                 }
 
                                 break;
@@ -490,7 +490,7 @@ HyperdbgLoadVmm()
 
     if (g_DeviceHandle)
     {
-        ShowMessages("handle of driver found, if you use 'load' before, please "
+        ShowMessages("handle of the driver found, if you use 'load' before, please "
                      "first unload it then call 'unload'\n");
         return 1;
     }
@@ -597,7 +597,7 @@ HyperdbgUnload()
     if (!g_DeviceHandle)
     {
         ShowMessages("err, handle not found, probably the driver is not "
-                     "initialized.\n");
+                     "initialized\n");
         return 1;
     }
 
@@ -671,5 +671,5 @@ HyperdbgUnload()
     //
     g_DeviceHandle = NULL;
 
-    ShowMessages("you're not on HyperDbg's hypervisor anymore !\n");
+    ShowMessages("you're not on HyperDbg's hypervisor anymore!\n");
 }

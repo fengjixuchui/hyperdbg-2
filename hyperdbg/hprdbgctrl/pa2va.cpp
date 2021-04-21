@@ -105,7 +105,7 @@ CommandPa2va(vector<string> SplittedCommand, string Command)
 
     if (!g_DeviceHandle)
     {
-        ShowMessages("handle of driver , probably the driver is not loaded. Did you "
+        ShowMessages("handle of the driver not found, probably the driver is not loaded. Did you "
                      "use 'load' command?\n");
         return;
     }
@@ -139,8 +139,18 @@ CommandPa2va(vector<string> SplittedCommand, string Command)
         return;
     }
 
-    //
-    // Show the results
-    //
-    ShowMessages("%llx\n", AddressDetails.VirtualAddress);
+    if (AddressDetails.KernelStatus == DEBUGEER_OPERATION_WAS_SUCCESSFULL)
+    {
+        //
+        // Show the results
+        //
+        ShowMessages("%llx\n", AddressDetails.VirtualAddress);
+    }
+    else
+    {
+        //
+        // An err occurred, no results
+        //
+        ShowErrorMessage(AddressDetails.KernelStatus);
+    }
 }

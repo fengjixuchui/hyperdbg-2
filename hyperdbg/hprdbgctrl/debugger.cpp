@@ -172,6 +172,10 @@ ShowErrorMessage(UINT32 Error)
         ShowMessages("err, memory type is invalid (%x)\n", Error);
         break;
 
+    case DEBUGEER_ERROR_INVALID_PROCESS_ID:
+        ShowMessages("err, process id is invalid (%x)\n", Error);
+        break;
+
     default:
         ShowMessages("err, error not found (%x)\n", Error);
         return FALSE;
@@ -246,14 +250,14 @@ IsConnectedToAnyInstanceOfDebuggerOrDebuggee()
     {
         ShowMessages("err, the current system is already connected to remote "
                      "machine (debuggee), use '.disconnect' to disconnect from the "
-                     "remote machine.\n");
+                     "remote machine\n");
         return TRUE;
     }
     else if (g_IsConnectedToRemoteDebugger)
     {
         ShowMessages("err, the current system is already connected to remote "
                      "machine (debugger), use '.disconnect' to disconnect from the "
-                     "remote machine from debugger.\n");
+                     "remote machine from debugger\n");
         return TRUE;
     }
     else if (g_IsSerialConnectedToRemoteDebuggee)
@@ -261,7 +265,7 @@ IsConnectedToAnyInstanceOfDebuggerOrDebuggee()
         ShowMessages(
             "err, the current system is already connected to remote "
             "machine (debuggee), use '.debug close' to disconnect from the "
-            "remote machine.\n");
+            "remote machine\n");
         return TRUE;
     }
     else if (g_IsSerialConnectedToRemoteDebugger)
@@ -269,7 +273,7 @@ IsConnectedToAnyInstanceOfDebuggerOrDebuggee()
         ShowMessages(
             "err, the current system is already connected to remote "
             "machine (debugger), use '.debug close' to disconnect from the "
-            "remote machine from debugger.\n");
+            "remote machine from debugger\n");
         return TRUE;
     }
 
@@ -1111,7 +1115,7 @@ InterpretConditionsAndCodes(vector<string> * SplittedCommand,
 
         if (!IsHexNotation(Temp))
         {
-            ShowMessages("please enter condition code in a hex notation.\n");
+            ShowMessages("please enter condition code in a hex notation\n");
             return FALSE;
         }
         AppendedFinalBuffer.append(Temp);

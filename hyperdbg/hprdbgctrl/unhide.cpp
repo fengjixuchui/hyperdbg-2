@@ -50,7 +50,7 @@ CommandUnhide(vector<string> SplittedCommand, string Command)
     //
     if (!g_DeviceHandle)
     {
-        ShowMessages("handle of driver , probably the driver is not loaded. Did you "
+        ShowMessages("handle of the driver not found, probably the driver is not loaded. Did you "
                      "use 'load' command?\n");
         return;
     }
@@ -89,10 +89,10 @@ CommandUnhide(vector<string> SplittedCommand, string Command)
     else if (UnhideRequest.KernelStatus ==
              DEBUGEER_ERROR_DEBUGGER_ALREADY_UHIDE)
     {
-        ShowMessages("debugger is not in transparent-mode.\n");
+        ShowMessages("debugger is not in transparent-mode\n");
     }
     else
     {
-        ShowMessages("unknown error occured :(\n");
+        ShowMessages("unknown error occurred :(\n");
     }
 }
