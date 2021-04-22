@@ -17,17 +17,19 @@ using namespace std;
 // Global Variables
 //
 extern DEBUGGING_STATE g_DebuggingState;
-extern BOOLEAN         g_IsCommandListInitialized;
 extern CommandType     g_CommandList;
-extern BOOLEAN         g_LogOpened;
-extern BOOLEAN         g_ExecutingScript;
-extern BOOLEAN         g_IsConnectedToHyperDbgLocally;
-extern BOOLEAN         g_IsConnectedToRemoteDebuggee;
-extern BOOLEAN         g_IsRemoteDebuggerMessageReceived;
-extern BOOLEAN         g_IsSerialConnectedToRemoteDebuggee;
-extern BOOLEAN         g_IsDebuggeeRunning;
-extern string          g_ServerPort;
-extern string          g_ServerIp;
+
+extern BOOLEAN g_IsCommandListInitialized;
+extern BOOLEAN g_LogOpened;
+extern BOOLEAN g_ExecutingScript;
+extern BOOLEAN g_IsConnectedToHyperDbgLocally;
+extern BOOLEAN g_IsConnectedToRemoteDebuggee;
+extern BOOLEAN g_IsSerialConnectedToRemoteDebuggee;
+extern BOOLEAN g_IsDebuggeeRunning;
+extern BOOLEAN g_BreakPrintingOutput;
+
+extern string g_ServerPort;
+extern string g_ServerIp;
 
 /**
  * @brief Interpret commands
@@ -95,9 +97,22 @@ HyperdbgInterpreter(const char * Command)
           DEBUGGER_COMMAND_ATTRIBUTE_LOCAL_COMMAND_IN_REMOTE_CONNECTION))
     {
         //
+        // Check it here because generally, we use this variable in host
+        // for showing the correct signature but we won't try to block
+        // other commands, the only thing is events which is blocked
+        // by the remote computer itself
+        //
+        if (g_BreakPrintingOutput)
+        {
+            g_BreakPrintingOutput = FALSE;
+        }
+
+        //
         // It's a connection over network (VMI-Mode)
         //
         RemoteConnectionSendCommand(Command, strlen(Command) + 1);
+
+        ShowMessages("\n");
 
         //
         // Indicate that we sent the command to the target system
@@ -180,14 +195,11 @@ HyperdbgShowSignature()
 {
     if (g_IsConnectedToRemoteDebuggee)
     {
-        if (g_IsRemoteDebuggerMessageReceived)
-        {
-            ShowMessages("HyperDbg [%s:%s] >", g_ServerIp.c_str(), g_ServerPort.c_str());
-        }
+        ShowMessages("[%s:%s] HyperDbg> ", g_ServerIp.c_str(), g_ServerPort.c_str());
     }
     else if (g_DebuggingState.IsAttachedToUsermodeProcess)
     {
-        ShowMessages("HyperDbg (%x:%x) >", g_DebuggingState.ConnectedProcessId, g_DebuggingState.ConnectedThreadId);
+        ShowMessages("(%x:%x) HyperDbg> ", g_DebuggingState.ConnectedProcessId, g_DebuggingState.ConnectedThreadId);
     }
     else
     {
