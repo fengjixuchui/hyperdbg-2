@@ -17,7 +17,9 @@
 extern BOOLEAN g_BreakPrintingOutput;
 extern BOOLEAN g_AutoUnpause;
 extern BOOLEAN g_IsConnectedToRemoteDebuggee;
+extern BOOLEAN g_IsConnectedToRemoteDebugger;
 extern BOOLEAN g_IsSerialConnectedToRemoteDebuggee;
+extern BOOLEAN g_IsSerialConnectedToRemoteDebugger;
 
 /**
  * @brief handle CTRL+C and CTRL+Break events
@@ -36,6 +38,17 @@ BreakController(DWORD CtrlType)
     case CTRL_C_EVENT:
 
         //
+        // Check if we should ignore the request or not
+        //
+        if (g_IsSerialConnectedToRemoteDebugger || g_IsSerialConnectedToRemoteDebugger)
+        {
+            //
+            // Handled (ignored)
+            //
+            return TRUE;
+        }
+
+        //
         // Check if the debuggee is running because of pausing or not
         //
         if (g_IsSerialConnectedToRemoteDebuggee)
@@ -57,7 +70,7 @@ BreakController(DWORD CtrlType)
                 RemoteConnectionSendCommand("pause", strlen("pause") + 1);
             }
 
-            Sleep(500);
+            Sleep(300);
 
             //
             // It is because we didn't query the target debuggee auto-unpause variable
@@ -71,6 +84,7 @@ BreakController(DWORD CtrlType)
                         "debugger will automatically continue when you run a new "
                         "event command, if you want to change this behaviour then "
                         "run run 'settings autounpause off'\n\n");
+
                     HyperdbgShowSignature();
                 }
                 else
@@ -80,6 +94,7 @@ BreakController(DWORD CtrlType)
                         "should run 'g' when you want to continue, otherwise run "
                         "'settings "
                         "autounpause on'\n\n");
+
                     HyperdbgShowSignature();
                 }
             }
@@ -97,6 +112,18 @@ BreakController(DWORD CtrlType)
         // Pass other signals to the next handler.
         //
     case CTRL_BREAK_EVENT:
+
+        //
+        // Check if we should ignore the request or not
+        //
+        if (g_IsSerialConnectedToRemoteDebugger || g_IsSerialConnectedToRemoteDebugger)
+        {
+            //
+            // Handled (ignored)
+            //
+            return TRUE;
+        }
+
         //
         // Check if the debuggee is running because of pausing or not
         //
@@ -133,6 +160,7 @@ BreakController(DWORD CtrlType)
                         "debugger will automatically continue when you run a new "
                         "event command, if you want to change this behaviour then "
                         "run run 'settings autounpause off'\n\n");
+
                     HyperdbgShowSignature();
                 }
                 else
@@ -142,6 +170,7 @@ BreakController(DWORD CtrlType)
                         "should run 'g' when you want to continue, otherwise run "
                         "'settings "
                         "autounpause on'\n\n");
+
                     HyperdbgShowSignature();
                 }
             }
