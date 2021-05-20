@@ -27,8 +27,8 @@
 //
 // add headers that you want to pre-compile here
 //
-
 #    define WIN32_LEAN_AND_MEAN
+#    define _NO_CVCONST_H // for symbol parsing
 
 #    include <winsock2.h>
 #    include <ws2tcpip.h>
@@ -58,6 +58,8 @@
 #    include <numeric>
 #    include <tlhelp32.h>
 #    include <VersionHelpers.h>
+#    include <tchar.h>
+#    include <dbghelp.h>
 
 //
 // HyperDbg defined headers
@@ -78,6 +80,7 @@
 #    include "namedpipe.h"
 #    include "forwarding.h"
 #    include "kd.h"
+#    include "symbol.h"
 
 #endif // PCH_H
 
@@ -90,3 +93,8 @@
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "Mswsock.lib")
 #pragma comment(lib, "AdvApi32.lib")
+
+//
+// Needed to link symbol server
+//
+#pragma comment(lib, "dbghelp.lib")

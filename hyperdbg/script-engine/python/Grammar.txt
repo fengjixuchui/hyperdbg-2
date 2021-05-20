@@ -1,10 +1,13 @@
+# ThreeOpFunc1 inputs are three numbers.
+.ThreeOpFunc1->memset
+
 # OneOpFunc1 input is a number and returns a number.
 .OneOpFunc1->poi db dd dw dq neg hi low not
 
 # OneOpFunc2 input is a number.
 .OneOpFunc2->print formats disableevent enableevent
 
-.ZeroOpFunc1->break
+.ZeroOpFunc1->pause
 
 .VarArgFunc1->printf 
 
@@ -26,6 +29,8 @@ STATEMENT->DO_WHILE_STATEMENT
 STATEMENT->FOR_STATEMENT
 STATEMENT->ASSIGN_STATEMENT ;
 STATEMENT->CALL_FUNC_STATEMENT ;
+STATEMENT->break ;
+STATEMENT->continue ;
 
 
 ASSIGN_STATEMENT->L_VALUE = EXPRESSION @MOV NULL
@@ -114,6 +119,8 @@ E10->E12
 
 
 E12->.OneOpFunc1 ( EXPRESSION @.OneOpFunc1 ) 
+E12->.ThreeOpFunc1 ( EXPRESSION , EXPRESSION , EXPRESSION , @.ThreeOpFunc1 ) 
+
 E12->( EXPRESSION )
 
 
