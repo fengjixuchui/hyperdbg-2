@@ -32,6 +32,11 @@ VmxDpcBroadcastAllocateVmxonRegions(KDPC * Dpc, PVOID DeferredContext, PVOID Sys
     //
     AsmEnableVmxOperation();
 
+    //
+    // Fix Cr4 and Cr0 bits during VMX operation
+    //
+    VmxFixCr4AndCr0Bits();
+
     LogDebugInfo("VMX-Operation Enabled Successfully");
 
     if (!VmxAllocateVmxonRegion(&g_GuestState[CurrentProcessorNumber]))

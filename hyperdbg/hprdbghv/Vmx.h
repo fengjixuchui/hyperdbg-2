@@ -683,6 +683,9 @@ VmxVmresume();
 VOID
 VmxVmxoff();
 
+VOID
+VmxFixCr4AndCr0Bits();
+
 BOOLEAN
 VmxLoadVmcs(VIRTUAL_MACHINE_STATE * CurrentGuestState);
 
