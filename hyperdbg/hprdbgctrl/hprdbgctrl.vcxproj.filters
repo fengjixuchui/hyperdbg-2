@@ -105,9 +105,6 @@
     <ClInclude Include="commands.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="symbol.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="readmem.cpp">
@@ -373,6 +370,12 @@
     </ClCompile>
     <ClCompile Include="symbol.cpp">
       <Filter>Resource Files\Source Files\Debugger\Essentials</Filter>
+    </ClCompile>
+    <ClCompile Include="sympath.cpp">
+      <Filter>Resource Files\Source Files\Debugger\Commands\Meta Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="sym.cpp">
+      <Filter>Resource Files\Source Files\Debugger\Commands\Meta Commands</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
