@@ -29,6 +29,11 @@ ScriptEngineSearchSymbolForMaskWrapper(const char * SearchMask);
 BOOLEAN
 ScriptEngineConvertFileToPdbPathWrapper(const char * LocalFilePath, char * ResultPath);
 
+BOOLEAN
+ScriptEngineConvertFileToPdbFileAndGuidAndAgeDetailsWrapper(const char * LocalFilePath,
+                                                            char *       PdbFilePath,
+                                                            char *       GuidAndAgeDetails);
+
 //////////////////////////////////////////////////
 //          Script Engine Wrapper               //
 //////////////////////////////////////////////////
@@ -59,15 +64,6 @@ ListeningSerialPauseDebuggeeThread(PVOID Param);
 
 DWORD WINAPI
 ListeningSerialPauseDebuggerThread(PVOID Param);
-
-//
-// For symbol (pdb) parsing
-//
-BOOLEAN
-SymbolConvertNameToAddress(string TextToConvert, PUINT64 Result);
-
-BOOLEAN
-SymbolLoadNtoskrnlSymbol(UINT64 BaseAddress);
 
 //////////////////////////////////////////////////
 //            	    Structures                  //
