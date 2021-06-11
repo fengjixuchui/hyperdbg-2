@@ -20,8 +20,10 @@
 #define _NO_CVCONST_H // for symbol parsing
 #include <DbgHelp.h>
 
+#include "common-utils.h"
 #include "Definition.h"
 #include "symbol-parser.h"
+
 
 using namespace std;
 
@@ -29,3 +31,8 @@ using namespace std;
 // Needed to link symbol server
 //
 #pragma comment(lib, "dbghelp.lib")
+
+//
+// For URLDownloadToFileA
+//
+#pragma comment(lib, "Urlmon.lib")

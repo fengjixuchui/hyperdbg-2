@@ -45,6 +45,10 @@ CommandSymHelp()
 VOID
 CommandSym(vector<string> SplittedCommand, string Command)
 {
+    WCHAR            ConfigPath[MAX_PATH] = {0};
+    inipp::Ini<char> Ini;
+    string           SymbolServer = "";
+
     if (SplittedCommand.size() == 1)
     {
         ShowMessages("incorrect use of '.sym'\n\n");
@@ -77,7 +81,7 @@ CommandSym(vector<string> SplittedCommand, string Command)
         for (size_t i = 0; i < g_SymbolTableSize / sizeof(MODULE_SYMBOL_DETAIL); i++)
         {
             ShowMessages("is pdb details available? : %s\n", g_SymbolTable[i].IsSymbolDetailsFound ? "true" : "false");
-            ShowMessages("is pdb a path instead of module name? : %s\n", g_SymbolTable[i].IsRealSymbolPath ? "true" : "false");
+            ShowMessages("is pdb a path instead of module name? : %s\n", g_SymbolTable[i].IsLocalSymbolPath ? "true" : "false");
             ShowMessages("base address : %llx\n", g_SymbolTable[i].BaseAddress);
             ShowMessages("file path : %s\n", g_SymbolTable[i].FilePath);
             ShowMessages("guid and age : %s\n", g_SymbolTable[i].ModuleSymbolGuidAndAge);
@@ -102,6 +106,48 @@ CommandSym(vector<string> SplittedCommand, string Command)
         // Build the symbol table
         //
         SymbolBuildSymbolTable(&g_SymbolTable, &g_SymbolTableSize);
+
+        //
+        // *** Read symbol path/server from config file ***
+        //
+
+        //
+        // Get config file path
+        //
+        GetConfigFilePath(ConfigPath);
+
+        if (!IsFileExistW(ConfigPath))
+        {
+            ShowMessages("please configure the symbol path before using this command. use 'help .sympath' for more information\n");
+            return;
+        }
+
+        ifstream Is(ConfigPath);
+
+        //
+        // Read config file
+        //
+        Ini.parse(Is);
+
+        //
+        // Show config file
+        //
+        // Ini.generate(std::cout);
+
+        inipp::get_value(Ini.sections["DEFAULT"], "SymbolServer", SymbolServer);
+
+        Is.close();
+
+        if (SymbolServer.empty())
+        {
+            ShowMessages("err, invalid config for symbol server/path\n");
+            return;
+        }
+
+        //
+        // Load available symbols
+        //
+        ScriptEngineSymbolInitLoadWrapper(g_SymbolTable, g_SymbolTableSize, SymbolServer.c_str());
 
         ShowMessages("symbol table successfully updated\n");
     }

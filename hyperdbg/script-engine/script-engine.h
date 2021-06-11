@@ -1,5 +1,5 @@
 /**
- * @file ScriptEngine.h
+ * @file script-engine.h
  * @author M.H. Gholamrezei (gholamrezaei.mh@gmail.com)
  * @brief Script engine parser and codegen
  * @details
@@ -9,15 +9,10 @@
  * @copyright This project is released under the GNU Public License v3.
  *
  */
-
 #pragma once
+
 #ifndef SCRIPT_ENGINE_H
 #    define SCRIPT_ENGINE_H
-
-#    include <stdio.h>
-#    include "ScriptEngineCommon.h"
-#    include "scanner.h"
-#    include "common.h"
 
 //
 // *** import pdb parser functions ***
@@ -28,6 +23,7 @@ __declspec(dllimport) UINT32 SymUnloadAllSymbols();
 __declspec(dllimport) UINT32 SymSearchSymbolForMask(const char * SearchMask);
 __declspec(dllimport) BOOLEAN SymConvertFileToPdbPath(const char * LocalFilePath, char * ResultPath);
 __declspec(dllimport) BOOLEAN SymConvertFileToPdbFileAndGuidAndAgeDetails(const char * LocalFilePath, char * PdbFilePath, char * GuidAndAgeDetails);
+__declspec(dllimport) BOOLEAN SymbolInitLoad(PMODULE_SYMBOL_DETAIL BufferToStoreDetails, UINT32 StoredLength, const char * SymbolPath);
 
 //
 // *** export pdb wrapper as script engine function ***
@@ -44,6 +40,8 @@ __declspec(dllexport) BOOLEAN
     ScriptEngineConvertFileToPdbPath(const char * LocalFilePath, char * ResultPath);
 __declspec(dllexport) BOOLEAN
     ScriptEngineConvertFileToPdbFileAndGuidAndAgeDetails(const char * LocalFilePath, char * PdbFilePath, char * GuidAndAgeDetails);
+__declspec(dllexport) BOOLEAN
+    ScriptEngineSymbolInitLoad(PMODULE_SYMBOL_DETAIL BufferToStoreDetails, UINT32 StoredLength, const char * SymbolPath);
 
 //
 // *** Exoort script engine functions ***

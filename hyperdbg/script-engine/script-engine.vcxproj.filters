@@ -15,9 +15,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="pch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -27,36 +24,30 @@
     <ClInclude Include="scanner.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ScriptEngine.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="parse_table.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="globals.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="script-engine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="parse-table.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="scanner.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ScriptEngine.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="common.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="parse_table.c">
+    <ClCompile Include="globals.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="globals.c">
+    <ClCompile Include="script-engine.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="parse-table.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

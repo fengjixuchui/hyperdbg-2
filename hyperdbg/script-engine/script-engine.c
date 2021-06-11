@@ -1,5 +1,5 @@
 /**
- * @file ScriptEngine.c
+ * @file script-engine.c
  * @author M.H. Gholamrezei (gholamrezaei.mh@gmail.com)
  * @author Sina Karvandi (sina@rayanfam.com)
  * @brief Script engine parser and codegen
@@ -10,17 +10,7 @@
  * @copyright This project is released under the GNU Public License v3.
  *
  */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include "globals.h"
-#include "common.h"
-#include "parse_table.h"
-#include "ScriptEngine.h"
-#include "ScriptEngineCommonDefinitions.h"
-#include "string.h"
+#include "pch.h"
 
 //#define _SCRIPT_ENGINE_DBG_EN
 
@@ -76,6 +66,15 @@ ScriptEngineConvertFileToPdbPath(const char * LocalFilePath, char * ResultPath)
     // A wrapper for pdb to path converter
     //
     return SymConvertFileToPdbPath(LocalFilePath, ResultPath);
+}
+
+BOOLEAN
+ScriptEngineSymbolInitLoad(PMODULE_SYMBOL_DETAIL BufferToStoreDetails, UINT32 StoredLength, const char * SymbolPath)
+{
+    //
+    // A wrapper for pdb and modules parser
+    //
+    return SymbolInitLoad(BufferToStoreDetails, StoredLength, SymbolPath);
 }
 
 BOOLEAN

@@ -15,10 +15,10 @@
 //
 // Global Variables
 //
-extern std::vector<PSYMBOL_LOADED_MODULE_DETAILS> g_LoadedModules;
-extern BOOLEAN                                    g_IsLoadedModulesInitialized;
-extern CHAR *                                     g_CurrentModuleName;
-extern CHAR                                       g_NtModuleName[_MAX_FNAME];
+std::vector<PSYMBOL_LOADED_MODULE_DETAILS> g_LoadedModules;
+BOOLEAN                                    g_IsLoadedModulesInitialized = FALSE;
+CHAR *                                     g_CurrentModuleName          = NULL;
+CHAR                                       g_NtModuleName[_MAX_FNAME]   = {0};
 
 /**
  * @brief Interpret and find module base , based on module name 
@@ -1048,5 +1048,99 @@ SymConvertFileToPdbFileAndGuidAndAgeDetails(const char * LocalFilePath, char * P
     //
     // By default, return false
     //
+    return FALSE;
+}
+
+/**
+ * @brief check if the pdb files of loaded symbols are available or not
+ * 
+ * @param BufferToStoreDetails Pointer to a buffer to store the symbols details
+ * this buffer will be allocated by this function and needs to be freed by caller
+ * @param StoredLength The length that stored on the BufferToStoreDetails
+ * @param SymbolPath The path of symbols
+ * @return BOOLEAN
+ */
+BOOLEAN
+SymbolInitLoad(PMODULE_SYMBOL_DETAIL BufferToStoreDetails, UINT32 StoredLength, const char * SymbolPath)
+{
+    string Tmp, SymDir;
+    string SymPath(SymbolPath);
+
+    vector<string> SplitedsymPath = Split(SymPath, '*');
+    if (SplitedsymPath.size() < 2)
+        return FALSE;
+    if (SplitedsymPath[1].find(":\\") == string::npos)
+        return FALSE;
+
+    SymDir = SplitedsymPath[1];
+    for (size_t i = 0; i < StoredLength / sizeof(MODULE_SYMBOL_DETAIL); i++)
+    {
+        if (BufferToStoreDetails[i].IsLocalSymbolPath)
+        {
+            if (IsFileExists(BufferToStoreDetails[i].ModuleSymbolPath))
+            {
+                BufferToStoreDetails[i].IsSymbolPDBAvaliable = TRUE;
+                SymLoadFileSymbol(BufferToStoreDetails[i].BaseAddress, BufferToStoreDetails[i].ModuleSymbolPath);
+            }
+        }
+        else
+        {
+            Tmp = SymDir +
+                  "\\" +
+                  BufferToStoreDetails[i].ModuleSymbolPath +
+                  "\\" +
+                  BufferToStoreDetails[i].ModuleSymbolGuidAndAge +
+                  "\\" +
+                  BufferToStoreDetails[i].ModuleSymbolPath;
+
+            if (IsFileExists(Tmp))
+            {
+                BufferToStoreDetails[i].IsSymbolPDBAvaliable = TRUE;
+                SymLoadFileSymbol(BufferToStoreDetails[i].BaseAddress, Tmp.c_str());
+            }
+            else
+            {
+                //SymbolPDBDownload(BufferToStoreDetails[i].ModuleSymbolPath, BufferToStoreDetails[i].ModuleSymbolGuidAndAge, SymPath);
+            }
+        }
+    }
+}
+
+/**
+ * @brief download pdb file 
+ * 
+ * @param BufferToStoreDetails Pointer to a buffer to store the symbols details
+ * this buffer will be allocated by this function and needs to be freed by caller
+ * @param StoredLength The length that stored on the BufferToStoreDetails
+ * @param SymPath The path of symbols
+ * return BOOLEAN
+ */
+BOOLEAN
+SymbolPDBDownload(std::string SymName, std::string GUID, std::string SymPath)
+{
+    vector<string> SplitedsymPath = Split(SymPath, '*');
+    if (SplitedsymPath.size() < 2)
+        return FALSE;
+    if (SplitedsymPath[1].find(":\\") == string::npos)
+        return FALSE;
+    if (SplitedsymPath[2].find("http:") == string::npos && SplitedsymPath[2].find("https:") == string::npos)
+        return FALSE;
+
+    string SymDir            = SplitedsymPath[1];
+    string SymDownloadServer = SplitedsymPath[2];
+    string DownloadURL       = SymDownloadServer + "/" + SymName + "/" + GUID + "/" + SymName;
+    string SymFullDir        = SymDir + "\\" + SymName + "\\" + GUID + "\\";
+    if (!CreateDirectoryRecursive(SymFullDir))
+    {
+        printf("err, unable to create sympath directory '%s'\n", SymFullDir);
+        return FALSE;
+    }
+    printf("downloading symbol '%s'...", SymName.c_str());
+    if (S_OK == URLDownloadToFileA(NULL, DownloadURL.c_str(), (SymFullDir + "\\" + SymName).c_str(), 0, NULL))
+    {
+        printf("\tdownloaded\n");
+        return TRUE;
+    }
+
     return FALSE;
 }

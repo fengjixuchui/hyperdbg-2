@@ -34,6 +34,11 @@ ScriptEngineConvertFileToPdbFileAndGuidAndAgeDetailsWrapper(const char * LocalFi
                                                             char *       PdbFilePath,
                                                             char *       GuidAndAgeDetails);
 
+BOOLEAN
+ScriptEngineSymbolInitLoadWrapper(PMODULE_SYMBOL_DETAIL BufferToStoreDetails,
+                                  UINT32                StoredLength,
+                                  const char *          SymbolPath);
+
 //////////////////////////////////////////////////
 //          Script Engine Wrapper               //
 //////////////////////////////////////////////////
