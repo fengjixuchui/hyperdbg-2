@@ -87,12 +87,8 @@ HyperDbg subsystems: </br>
 ## Plugins
 The plugin framework is not ready for the current version of HyperDbg. Future versions will support plugins.
 
-## Donations to charity
-We spent thousands of hours on HyperDbg and it's free and open-source for you, If you want to help to develop HyperDbg, please donate to children in Africa and send a picture of your donation to us, this makes all HyperDbg developers, super happy! Don't hesitate to send us the pictures, this way we know that we're doing something useful.
-<p align="center">(https://www.compassion.com/donate/donate-to-children-in-africa.htm)</p>
-
 ## Credits
-- M. Sina Karvandi (<a href="https://twitter.com/Intel80x86">@Intel80x86</a>)
+- Mohammad Sina Karvandi (<a href="https://twitter.com/Intel80x86">@Intel80x86</a>)
 - MH Gholamrezaei (<a href="https://twitter.com/mohoseinam">@mohoseinam</a>)
 - Mohammad Ataei (<a href="https://twitter.com/mammadataei">@mammadataei</a>)
 - Saleh Khalaj Monfared (<a href="https://twitter.com/S4l3hh">@S4l3hh</a>)
